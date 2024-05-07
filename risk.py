@@ -11,6 +11,7 @@ from src.init_graph import init_graph
 from src.init_positions import positions_720p as positions
 
 color_map = {
+    0: "white",  # "no owner"
     1: "red",
     2: "blue",
     3: "green",
@@ -225,15 +226,67 @@ class Board:
         for country in self.graph.nodes:
             self.randomize_country(country)
 
+    def populate_initial_board(self):
+        """Populate the board with the initial number of troops."""
+        list_of_countries = list(self.graph.nodes)
+        random.shuffle(list_of_countries)
+        # Continue while all players sum 20 troops
+        while (0 in [
+                self.graph.nodes[country]["owner"] for country in list_of_countries
+            ]):
+            for player in range(1, 7):
+                for country in list_of_countries:
+                    if self.graph.nodes[country]["owner"] == 0:
+                        self.update_owner(country, player)
+                        self.update_troops(country, 1)
+                        plt.pause(0.01)
+                        break
+        
+        # Get how many troops each player has in the board at this point
+        players_troops = {
+            player: sum(
+                [
+                    self.graph.nodes[country]["troops"]
+                    for country in list_of_countries
+                    if self.graph.nodes[country]["owner"] == player
+                ]
+            )
+            for player in range(1, 7)
+        }
+        
+        # Continue while at least one player has less than 20 troops
+        while min(players_troops.values()) < 20:
+            players_less_than_20 = [
+                player
+                for player, troops in players_troops.items()
+                if troops < 20
+            ]
+            player = random.choice(players_less_than_20)
+            player_countries = [
+                country
+                for country in list_of_countries
+                if self.graph.nodes[country]["owner"] == player
+            ]
+            random.shuffle(player_countries)
+            first_country = player_countries[0]
+            self.update_troops(
+                first_country, self.graph.nodes[first_country]["troops"] + 1
+            )
+            players_troops[player] += 1
+            plt.pause(0.01)
+
 
 if __name__ == "__main__":
     board = Board()
     plt.pause(1)
-    board.randomize_board()
-    plt.pause(2)
+    board.populate_initial_board()
+    print("Initial board populated.")
+    plt.pause(8)
+    """
     while True:
         board.update_edge(("Ukraine", "Afghanistan"))
         plt.pause(2)
-        board.update_edge(("Afghanistan", "India"))
+        board.update_edge(("Afghanistan", "Ukraine"))
         plt.pause(2)
         break
+    """
