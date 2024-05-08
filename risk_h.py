@@ -346,7 +346,7 @@ class Board:
         player_data = self.calculate_player_stats()
         info_text = ""
         for player, data in player_data.items():
-            info_text += f"PLAYER {player}:\nTroops: {data['troops']}\nTerritories: {data['territories']}\n\n"
+            info_text += f"PLAYER {player}: {str(color_map[player]).capitalize()}\nTroops: {data['troops']}\nTerritories: {data['territories']}\n\n"
         self.info_ax.text(
             0.5,
             0.5,
