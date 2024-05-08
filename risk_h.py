@@ -290,17 +290,15 @@ class Board:
         """Populate the board with the initial number of troops."""
         list_of_countries = list(self.graph.nodes)
         random.shuffle(list_of_countries)
-        # Continue while all players have 20 troops
-        while 0 in [
-            self.graph.nodes[country]["owner"] for country in list_of_countries
-        ]:
-            for player in range(1, 7):
-                for country in list_of_countries:
-                    if self.graph.nodes[country]["owner"] == 0:
-                        self.update_owner(country, player)
-                        self.update_troops(country, 1)
-                        plt.pause(0.01)
-                        break
+
+        # Select one random country for each player to start
+        for player in range(1, 7):
+            country = list_of_countries[player - 1]
+            self.update_owner(country, player)
+            self.update_troops(country, 1)
+            plt.pause(0.01)
+
+        # Keep track of the number of troops for each player
         players_troops = {
             player: sum(
                 [
@@ -311,23 +309,32 @@ class Board:
             )
             for player in range(1, 7)
         }
+
+        # Add troops to countries until each player has 20 troops
         while min(players_troops.values()) < 20:
             players_less_than_20 = [
                 player for player, troops in players_troops.items() if troops < 20
             ]
-            player = random.choice(players_less_than_20)
-            player_countries = [
-                country
-                for country in list_of_countries
-                if self.graph.nodes[country]["owner"] == player
-            ]
-            random.shuffle(player_countries)
-            first_country = player_countries[0]
-            self.update_troops(
-                first_country, self.graph.nodes[first_country]["troops"] + 1
-            )
-            players_troops[player] += 1
-            plt.pause(0.01)
+            for player in players_less_than_20:
+                available_countries = [
+                    country
+                    for country in list_of_countries
+                    if self.graph.nodes[country]["owner"] == player
+                    or self.graph.nodes[country]["owner"] == 0
+                ]
+                random.shuffle(available_countries)
+                selected_country = available_countries[
+                    random.randint(0, len(available_countries) - 1)
+                ]
+
+                if self.graph.nodes[selected_country]["owner"] == 0:
+                    self.update_owner(selected_country, player)
+
+                self.update_troops(
+                    selected_country, self.graph.nodes[selected_country]["troops"] + 1
+                )
+                players_troops[player] += 1
+                plt.pause(0.01)
 
     def update_info_panel(self):
         self.info_ax.clear()
@@ -363,23 +370,22 @@ class Board:
 
 if __name__ == "__main__":
     board = Board()
-    plt.pause(1)
     board.populate_initial_board()
     print("Initial board populated.")
-    plt.pause(1)
+    plt.pause(0.1)
     board.highlight_country("Ukraine")
     board.highlight_edge(("Ukraine", "Afghanistan"))
-    plt.pause(1)
+    plt.pause(0.1)
     board.highlight_country("India")
     board.highlight_edge(("India", "Afghanistan"))
-    plt.pause(1)
+    plt.pause(0.1)
     board.highlight_country("Siam")
     board.highlight_edge(("Siam", "Indonesia"))
-    plt.pause(1)
+    plt.pause(0.1)
     board.clear_highlighted_country()
-    plt.pause(1)
+    plt.pause(0.1)
     board.clear_highlighted_edge()
-    plt.pause(1)
+    plt.pause(0.1)
     board.highlight_country("Indonesia")
     board.highlight_edge(("Indonesia", "Siam"))
     plt.pause(10)
