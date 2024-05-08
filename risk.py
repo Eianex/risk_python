@@ -26,6 +26,7 @@ class Board:
 
     def __init__(self):
         self.graph = init_graph()
+        self.highlighted_country = None
 
         plt.figure(figsize=(12.8, 7.2))
         plt.xlim([0, 1280])
@@ -92,7 +93,6 @@ class Board:
 
     def draw_nodes(self):
         if self.nodes:
-            #print(self.nodes)
             if isinstance(self.nodes, list):
                 for coll in self.nodes:
                     coll.remove()
@@ -166,7 +166,6 @@ class Board:
     def highlight_edge(self, edge):
         """Update an edge of the graph."""
         if self.edges:
-            # print(self.edges)
             if isinstance(self.edges, list):
                 for coll in self.edges:
                     if coll:
@@ -177,6 +176,7 @@ class Board:
                                 line.remove()
             else:
                 self.edges.remove()
+
         default_edges = [
             (u, v)
             for u, v in self.graph.edges
@@ -219,7 +219,8 @@ class Board:
 
     def highlight_country(self, country):
         """Highlight a country in the board."""
-        highlighted_country = nx.draw_networkx_nodes(
+        self.clear_highlighted_country()
+        self.highlighted_country = nx.draw_networkx_nodes(
             self.graph,
             positions,
             nodelist=[country],
@@ -230,8 +231,34 @@ class Board:
             linewidths=4,
             node_shape="o",
         )
-        highlighted_country.set_zorder(1)
-        self.nodes = [self.nodes, highlighted_country]
+        self.highlighted_country.set_zorder(1)
+
+    def clear_highlighted_country(self):
+        """Clear the highlighted country."""
+        if self.highlighted_country:
+            self.highlighted_country.remove()
+
+    def clear_highlighted_edge(self):
+        """Clear the highlighted edge."""
+        if self.edges:
+            if isinstance(self.edges, list):
+                for coll in self.edges:
+                    if coll:
+                        if type(coll) == LineCollection:
+                            coll.remove()
+                        else:
+                            for line in coll:
+                                line.remove()
+            else:
+                self.edges.remove()
+        self.edges = nx.draw_networkx_edges(
+            self.graph,
+            positions,
+            edgelist=self.get_edges_list(),
+            width=1,
+            edge_color="k",
+            style="dotted",
+        )
 
     def randomize_country(self, country):
         """Randomize the number of troops in a country."""
@@ -254,6 +281,7 @@ class Board:
             for player in range(1, 7):
                 for country in list_of_countries:
                     if self.graph.nodes[country]["owner"] == 0:
+                        self.highlight_country(country)
                         self.update_owner(country, player)
                         self.update_troops(country, 1)
                         plt.pause(0.01)
@@ -284,6 +312,7 @@ class Board:
             ]
             random.shuffle(player_countries)
             first_country = player_countries[0]
+            self.highlight_country(first_country)
             self.update_troops(
                 first_country, self.graph.nodes[first_country]["troops"] + 1
             )
@@ -294,17 +323,20 @@ class Board:
 if __name__ == "__main__":
     board = Board()
     plt.pause(1)
-    board.randomize_board()
+    board.populate_initial_board()
     print("Initial board populated.")
     plt.pause(1)
     board.highlight_country("Ukraine")
     board.highlight_edge(("Ukraine", "Afghanistan"))
-    plt.pause(20)
-    """
-    while True:
-        board.update_edge(("Ukraine", "Afghanistan"))
-        plt.pause(2)
-        board.update_edge(("Afghanistan", "Ukraine"))
-        plt.pause(2)
-        break
-    """
+    plt.pause(1)
+    board.highlight_country("India")
+    board.highlight_edge(("India", "Afghanistan"))
+    plt.pause(1)
+    board.highlight_country("Siam")
+    board.highlight_edge(("Siam", "Indonesia"))
+    plt.pause(1)
+    board.clear_highlighted_country()
+    plt.pause(1)
+    board.clear_highlighted_edge()
+    plt.pause(10)
+    plt.close()
