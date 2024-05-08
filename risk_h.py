@@ -1,12 +1,11 @@
 import os
 import random
-import time
 from typing import List, Tuple
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import networkx as nx
-from matplotlib.collections import LineCollection, PatchCollection
+from matplotlib.collections import LineCollection
 
 from src.init_graph import init_graph
 from src.init_positions import positions_720p as positions
