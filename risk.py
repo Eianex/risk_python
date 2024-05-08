@@ -235,6 +235,7 @@ class Board:
         """Clear the highlighted country."""
         if self.highlighted_country:
             self.highlighted_country.remove()
+            self.highlighted_country = None
 
     def clear_highlighted_edge(self):
         """Clear the highlighted edge."""
@@ -330,5 +331,8 @@ if __name__ == "__main__":
     board.clear_highlighted_country()
     plt.pause(1)
     board.clear_highlighted_edge()
+    plt.pause(1)
+    board.highlight_country("Indonesia")
+    board.highlight_edge(("Indonesia", "Siam"))
     plt.pause(10)
     plt.close()
