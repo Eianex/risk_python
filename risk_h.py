@@ -1,5 +1,6 @@
 import os
 import random
+import sys
 from typing import List, Tuple
 
 import matplotlib.gridspec as gridspec
@@ -42,6 +43,7 @@ class Board:
         img = plt.imread(img_path)
         self.board_ax.imshow(img, extent=[0, 1280, 0, 720], aspect="equal")
         self.info_ax.axis("off")
+        self.fig.canvas.mpl_connect("close_event", self.handle_close)
 
         self.nodes = nx.draw_networkx_nodes(
             self.graph,
@@ -76,6 +78,9 @@ class Board:
             ax=self.board_ax,
         )
         self.update_info_panel()
+
+    def handle_close(self, evt):
+        sys.exit()
 
     def get_nodes_colors(self) -> List[str]:
         return [
