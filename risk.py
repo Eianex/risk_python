@@ -78,7 +78,8 @@ class Board:
         ]
 
     def get_edges_list(self) -> List[Tuple[str, str]]:
-        edges_list = [
+
+        return [
             (u, v)
             for u, v in self.graph.edges
             if not (
@@ -86,18 +87,13 @@ class Board:
                 or (u == "Kamchatka" and v == "Alaska")
             )
         ]
-        return edges_list
 
     def get_troops_dict(self) -> dict:
         return {node: self.graph.nodes[node]["troops"] for node in self.graph.nodes}
 
     def draw_nodes(self):
         if self.nodes:
-            if isinstance(self.nodes, list):
-                for coll in self.nodes:
-                    coll.remove()
-            else:
-                self.nodes.remove()
+            self.nodes.remove()
         self.nodes = nx.draw_networkx_nodes(
             self.graph,
             positions,
@@ -156,11 +152,13 @@ class Board:
     def update_troops(self, country, troops):
         """Change the number of troops in a country."""
         self.graph.nodes[country]["troops"] = troops
+        self.highlight_country(country)
         self.draw_troops()
 
     def update_owner(self, country, owner):
         """Change the owner of a country."""
         self.graph.nodes[country]["owner"] = owner
+        self.highlight_country(country)
         self.draw_nodes()
 
     def highlight_edge(self, edge):
@@ -274,20 +272,17 @@ class Board:
         """Populate the board with the initial number of troops."""
         list_of_countries = list(self.graph.nodes)
         random.shuffle(list_of_countries)
-        # Continue while all players sum 20 troops
+        # Continue while all players have 20 troops
         while 0 in [
             self.graph.nodes[country]["owner"] for country in list_of_countries
         ]:
             for player in range(1, 7):
                 for country in list_of_countries:
                     if self.graph.nodes[country]["owner"] == 0:
-                        self.highlight_country(country)
                         self.update_owner(country, player)
                         self.update_troops(country, 1)
                         plt.pause(0.01)
                         break
-
-        # Get how many troops each player has in the board at this point
         players_troops = {
             player: sum(
                 [
@@ -298,8 +293,6 @@ class Board:
             )
             for player in range(1, 7)
         }
-
-        # Continue while at least one player has less than 20 troops
         while min(players_troops.values()) < 20:
             players_less_than_20 = [
                 player for player, troops in players_troops.items() if troops < 20
@@ -312,7 +305,6 @@ class Board:
             ]
             random.shuffle(player_countries)
             first_country = player_countries[0]
-            self.highlight_country(first_country)
             self.update_troops(
                 first_country, self.graph.nodes[first_country]["troops"] + 1
             )
