@@ -8,7 +8,7 @@ import networkx as nx
 from matplotlib.collections import LineCollection, PatchCollection
 
 from src.init_graph import init_graph
-from src.init_positions import positions_720p as positions
+from src.positions import positions_720p as positions
 
 color_map = {
     0: "white",  # "no owner"
