@@ -9,7 +9,7 @@ import networkx as nx
 from matplotlib.collections import LineCollection
 
 from src.init_graph import init_graph
-from src.positions import positions_720p as positions
+from src.positions import continents, positions
 
 color_map = {
     0: "white",  # "no owner"
@@ -20,6 +20,31 @@ color_map = {
     5: "purple",
     6: "orange",
 }
+
+
+def get_troops_updates(G1: nx.Graph, G2: nx.Graph) -> List[Tuple[str, int]]:
+    country_names = list(G1.nodes)
+    troops_updates = []
+    print(f"{G1==G2}")
+    for country in country_names:
+        troops1 = G1.nodes[country]["troops"]
+        troops2 = G2.nodes[country]["troops"]
+        if troops1 != troops2:
+            print(f"Troops in {country} changed from {troops1} to {troops2}")
+            troops_updates.append((country, troops2))
+    return troops_updates
+
+
+def get_owner_updates(G1: nx.Graph, G2: nx.Graph) -> List[Tuple[str, int]]:
+    country_names = list(G1.nodes)
+    owner_updates = []
+    for country in country_names:
+        owner1 = G1.nodes[country]["owner"]
+        owner2 = G2.nodes[country]["owner"]
+        if owner1 != owner2:
+            print(f"Owner of {country} changed from {owner1} to {owner2}")
+            owner_updates.append((country, owner2))
+    return owner_updates
 
 
 class Board:
@@ -234,8 +259,64 @@ class Board:
 
         self.edges = [default_edges, highlighted_edge]
 
+    def highlight_edge_slightly(self, edge):
+        """Update an edge of the graph."""
+        if self.edges:
+            if isinstance(self.edges, list):
+                for coll in self.edges:
+                    if coll:
+                        if type(coll) == LineCollection:
+                            coll.remove()
+                        else:
+                            for line in coll:
+                                line.remove()
+            else:
+                self.edges.remove()
+
+        default_edges = [
+            (u, v)
+            for u, v in self.graph.edges
+            if not (
+                (u, v) == edge
+                or (v, u) == edge
+                or (u == "Alaska" and v == "Kamchatka")
+                or (u == "Kamchatka" and v == "Alaska")
+            )
+        ]
+        default_edges = nx.draw_networkx_edges(
+            self.graph,
+            positions,
+            edgelist=default_edges,
+            width=1,
+            edge_color="k",
+            style="dotted",
+            ax=self.board_ax,
+        )
+        if isinstance(default_edges, list):
+            for coll in default_edges:
+                coll.set_zorder(1)
+        else:
+            default_edges.set_zorder(1)
+
+        highlighted_edge = nx.draw_networkx_edges(
+            self.graph,
+            positions,
+            edgelist=[edge],
+            width=2,
+            edge_color=color_map[self.graph.nodes[edge[0]]["owner"]],
+            style="dashed",
+            arrows=True,
+            arrowsize=24,
+            arrowstyle="-|>",
+            ax=self.board_ax,
+        )
+        for coll in highlighted_edge:
+            coll.set_zorder(3)
+
+        self.edges = [default_edges, highlighted_edge]
+
     def highlight_country(self, country):
-        """Highlight a country in the board."""
+        """Highlight a country in the self."""
         self.clear_highlighted_country()
         self.highlighted_country = nx.draw_networkx_nodes(
             self.graph,
@@ -371,26 +452,242 @@ class Board:
             stats[player] = {"troops": troops, "territories": len(territories)}
         return stats
 
+    @staticmethod
+    def dice_roll() -> int:
+        return random.randint(1, 6)
+
+    def path_exists(self, origin: str, destination: str, owner: int) -> bool:
+        # nx.has_path(self.graph, origin, destination)
+        # Analogous function to has_path but with the owner condition per connection between nodes
+        visited = {origin}
+        stack = [origin]
+        while stack:
+            node = stack.pop()
+            if node == destination:
+                return True
+            for neighbour in self.graph.neighbors(node):
+                if (
+                    neighbour not in visited
+                    and self.graph.nodes[neighbour]["owner"] == owner
+                ):
+                    visited.add(neighbour)
+                    stack.append(neighbour)
+        return False
+
+    def get_player_countries(self, player: int) -> List[str]:
+        all_countries = list(self.graph.nodes)
+        player_countries = []
+        for country in all_countries:
+            owner_of_country = self.graph.nodes[country]["owner"]
+            if owner_of_country == player:
+                player_countries.append(country)
+        print(f"Player {player} has countries {player_countries}")
+        return player_countries
+
+    def dice_rolls_defense(self, country: str) -> List[int]:
+        if self.graph.nodes[country]["troops"] > 1:
+            return [self.dice_roll(), self.dice_roll()]
+        else:
+            return [self.dice_roll()]
+
+    def dice_rolls_attack(self, country: str) -> List[int]:
+        if self.graph.nodes[country]["troops"] > 3:
+            return [self.dice_roll(), self.dice_roll(), self.dice_roll()]
+        elif self.graph.nodes[country]["troops"] == 3:
+            return [self.dice_roll(), self.dice_roll()]
+        else:
+            return [self.dice_roll()]
+
+    def get_player_continents(self, player: int) -> List:
+        player_countries = self.get_player_countries(player)
+        player_continents = []
+        for continent, countries in continents.items():
+            if all(country in player_countries for country in countries):
+                player_continents.append(continent)
+        return player_continents
+
+    def get_bonus_troops(self, player: int) -> int:
+        player_countries = self.get_player_countries(player)
+        bonus_territories = max(3, len(player_countries) // 3)
+        player_continents = self.get_player_continents(player)
+        if len(player_continents) == 0:
+            return bonus_territories
+        bonus_per_continent = {
+            "North America": 5,
+            "South America": 2,
+            "Europe": 5,
+            "Africa": 3,
+            "Asia": 7,
+            "Australia": 2,
+        }
+        total_bonus = (
+            sum(bonus_per_continent[continent] for continent in player_continents)
+            + bonus_territories
+        )
+        return total_bonus
+
+    def get_attacks(self, player) -> List[Tuple]:
+        player_countries = self.get_player_countries(player)
+        if not player_countries:
+            print("No countries to attack from")
+            return
+        countries_for_attack = [
+            country
+            for country in player_countries
+            if self.graph.nodes[country]["troops"] > 1
+        ]
+        if not countries_for_attack:
+            # print("No countries to attack from")
+            return []
+        neighbour_pairs = [
+            (country, neighbour)
+            for country in countries_for_attack
+            for neighbour in list(self.graph.neighbors(country))
+            if self.graph.nodes[neighbour]["owner"] != player
+        ]
+        if not neighbour_pairs:
+            return []
+        return neighbour_pairs
+
+    def roll_attack_once(self, attacker: str, defender: str):
+        possible_attacks = self.get_attacks(self.graph.nodes[attacker]["owner"])
+        if not possible_attacks or (attacker, defender) not in possible_attacks:
+            return
+
+        attacker_rolls = self.dice_rolls_attack(attacker)
+        defender_rolls = self.dice_rolls_defense(defender)
+
+        attacker_rolls.sort(reverse=True)
+        defender_rolls.sort(reverse=True)
+
+        for i in range(min(len(attacker_rolls), len(defender_rolls))):
+            if self.graph.nodes[attacker]["troops"] == 1:
+                break
+            if attacker_rolls[i] < defender_rolls[i]:
+                self.update_troops(attacker, self.graph.nodes[attacker]["troops"] - 1)
+            else:
+                if self.graph.nodes[defender]["troops"] > 1:
+                    self.update_troops(
+                        defender, self.graph.nodes[defender]["troops"] - 1
+                    )
+                else:
+                    self.update_owner(defender, self.graph.nodes[attacker]["owner"])
+                    self.update_troops(
+                        defender, self.graph.nodes[attacker]["troops"] - 1
+                    )
+                    self.update_troops(attacker, 1)
+                    break
+
+    def fortify_graph(self, country1, country2, troops):
+        self.update_troops(country1, self.graph.nodes[country1]["troops"] - troops)
+        self.update_troops(country2, self.graph.nodes[country2]["troops"] + troops)
+
+    def reinforce(self, player: int):
+        reinforce_troops: int = self.get_bonus_troops(player)
+        print(f"Player {player} has {reinforce_troops} troops to reinforce")
+        player_countries = self.get_player_countries(player)
+        if not player_countries:
+            return
+        while reinforce_troops > 0:
+            country = random.choice(player_countries)
+            troops = random.randint(1, reinforce_troops)
+            reinforce_troops -= troops
+            self.clear_highlighted_country()
+            plt.pause(0.3)
+            self.highlight_country(country)
+            plt.pause(0.5)
+            print(f"Player {player} is reinforcing {country} with {troops} troops")
+            self.update_troops(country, self.graph.nodes[country]["troops"] + troops)
+            plt.pause(1.5)
+            self.clear_highlighted_country()
+            plt.pause(0.1)
+            print("Reinforcement done")
+
+    def attack(self, player: int):
+        possible_attacks = self.get_attacks(player)
+        if not possible_attacks:
+            return
+        origin, destination = random.choice(possible_attacks)
+        print(
+            f"Player {player} is attacking from {origin} to {destination} with {self.graph.nodes[origin]['troops']} troops"
+        )
+
+        self.clear_highlighted_edge()
+        self.clear_highlighted_country()
+        plt.pause(0.3)
+        self.highlight_country(origin)
+        self.highlight_edge((origin, destination))
+        plt.pause(0.5)
+        self.roll_attack_once(origin, destination)
+        plt.pause(1.5)
+        self.clear_highlighted_edge()
+        self.clear_highlighted_country()
+        plt.pause(0.1)
+        print("Attack done")
+
+    def fortify(self, player: int):
+        player_countries = self.get_player_countries(player)
+        if not player_countries:
+            return
+        countries_for_fortify = [
+            country
+            for country in player_countries
+            if self.graph.nodes[country]["troops"] > 1
+        ]
+        if not countries_for_fortify:
+            return
+        origin = random.choice(countries_for_fortify)
+
+        destinations = [
+            country
+            for country in player_countries
+            if self.path_exists(origin, country, player) and country != origin
+        ]
+        if not destinations:
+            return
+        destination = random.choice(destinations)
+        n_troops = random.randint(1, self.graph.nodes[origin]["troops"] - 1)
+        print(
+            f"Player {player} is fortifying from {origin} to {destination} with {n_troops} troops"
+        )
+        self.clear_highlighted_country()
+        self.clear_highlighted_edge()
+        plt.pause(0.3)
+        self.highlight_country(destination)
+        self.highlight_edge_slightly((origin, destination))
+        plt.pause(0.6)
+        self.fortify_graph(origin, destination, n_troops)
+        plt.pause(1.5)
+        self.clear_highlighted_country()
+        self.clear_highlighted_edge()
+        plt.pause(0.1)
+        print("Fortification done\n")
+
+    def turn(self, player: int):
+        self.reinforce(player)
+        print("\n")
+        plt.pause(0.1)
+        self.attack(player)
+        print("\n")
+        plt.pause(0.1)
+        self.fortify(player)
+        print("\n")
+        plt.pause(0.1)
+
+    def game(self):
+        for turn in range(1000):
+            for player in range(1, 7):
+                self.turn(player)
+                plt.pause(0.1)
+                self.update_info_panel()
+                plt.pause(0.1)
+
 
 if __name__ == "__main__":
+
     board = Board()
     board.populate_initial_board()
     print("Initial board populated.")
-    plt.pause(0.1)
-    board.highlight_country("Ukraine")
-    board.highlight_edge(("Ukraine", "Afghanistan"))
-    plt.pause(0.1)
-    board.highlight_country("India")
-    board.highlight_edge(("India", "Afghanistan"))
-    plt.pause(0.1)
-    board.highlight_country("Siam")
-    board.highlight_edge(("Siam", "Indonesia"))
-    plt.pause(0.1)
-    board.clear_highlighted_country()
-    plt.pause(0.1)
-    board.clear_highlighted_edge()
-    plt.pause(0.1)
-    board.highlight_country("Indonesia")
-    board.highlight_edge(("Indonesia", "Siam"))
-    plt.pause(10)
-    plt.close()
+    plt.pause(1)
+    board.game()
+    plt.pause(2)

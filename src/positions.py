@@ -1,4 +1,4 @@
-positions_720p = {
+positions = {
     "Alaska": (124, 630),
     "Northwest Territory": (234, 627),
     "Greenland": (444, 666),
