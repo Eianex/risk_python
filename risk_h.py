@@ -571,11 +571,17 @@ class Board:
                         defender, self.graph.nodes[defender]["troops"] - 1
                     )
                 else:
+                    attacker_troops_left = self.graph.nodes[attacker]["troops"] - 1
+                    leave_troops_behind = 0
+
+                    if attacker_troops_left > 3:
+                        leave_troops_behind = random.randint(0, 1)
+
                     self.update_owner(defender, self.graph.nodes[attacker]["owner"])
                     self.update_troops(
-                        defender, self.graph.nodes[attacker]["troops"] - 1
+                        defender, attacker_troops_left - leave_troops_behind
                     )
-                    self.update_troops(attacker, 1)
+                    self.update_troops(attacker, 1 + leave_troops_behind)
                     break
 
     def fortify_graph(self, country1, country2, troops):
@@ -706,9 +712,18 @@ class Board:
                 destinations.remove(peaceful_destination)
         if not destinations:
             return
+        origin_troops = self.graph.nodes[origin]["troops"]
+        # Check if all origin neighbours are player's countries
+        origin_peaceful = all(
+            neighbour in player_countries
+            for neighbour in list(self.graph.neighbors(origin))
+        )
+        lower_level_margin = 1
+        if origin_peaceful and origin_troops > 3:
+            lower_level_margin = origin_troops - 2
 
         destination = random.choice(destinations)
-        n_troops = random.randint(1, self.graph.nodes[origin]["troops"] - 1)
+        n_troops = random.randint(lower_level_margin, origin_troops - 1)
         print(
             f"Player {player} is fortifying from {origin} to {destination} with {n_troops} troops"
         )
