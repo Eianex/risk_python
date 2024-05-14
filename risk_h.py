@@ -534,7 +534,7 @@ class Board:
         countries_for_attack = [
             country
             for country in player_countries
-            if self.graph.nodes[country]["troops"] > 1
+            if self.graph.nodes[country]["troops"] > 2
         ]
         if not countries_for_attack:
             # print("No countries to attack from")
@@ -589,7 +589,24 @@ class Board:
         if not player_countries:
             return
         while reinforce_troops > 0:
-            country = random.choice(player_countries)
+            player_countries_copy = player_countries.copy()
+            peaceful_destinations = [
+                country
+                for country in player_countries
+                if all(
+                    neighbour in player_countries
+                    for neighbour in list(self.graph.neighbors(country))
+                )
+            ]
+            if peaceful_destinations:
+                # Remove peaceful_destinations from the possible destinations:
+                for peaceful_destination in peaceful_destinations:
+                    player_countries_copy.remove(peaceful_destination)
+
+            if not player_countries_copy:
+                return
+
+            country = random.choice(player_countries_copy)
             troops = random.randint(1, reinforce_troops)
             reinforce_troops -= troops
             self.clear_highlighted_country()
@@ -607,7 +624,19 @@ class Board:
         possible_attacks = self.get_attacks(player)
         if not possible_attacks:
             return
-        origin, destination = random.choice(possible_attacks)
+        # Shuffle the possible attacks list of tuples to randomize the order
+        possible_attacks = random.sample(possible_attacks, len(possible_attacks))
+
+        lowest_attack = (999, 999)
+        lowest_names = ("", "")
+        for pair_attack in possible_attacks:
+            origin_troops = self.graph.nodes[pair_attack[0]]["troops"]
+            destination_troops = self.graph.nodes[pair_attack[1]]["troops"]
+            if destination_troops < lowest_attack[1] and origin_troops > 1:
+                lowest_attack = (origin_troops, destination_troops)
+                lowest_names = pair_attack
+
+        origin, destination = lowest_names
         print(
             f"Player {player} is attacking from {origin} to {destination} with {self.graph.nodes[origin]['troops']} troops"
         )
@@ -625,13 +654,20 @@ class Board:
         plt.pause(0.1)
         print("Attack done")
         # Check if the player conquered a country
-        if self.graph.nodes[destination]["owner"] == player:
-            # If so, attack again
-            print(f"Player {player} conquered {destination} and can attack again\n")
+        if (self.graph.nodes[destination]["owner"] == player) and (
+            self.graph.nodes[origin]["troops"] > 2
+        ):
+            print(
+                f"Player {player} conquered {destination} and has troops for attacking again.\n"
+            )
             self.attack(player)
-        # Check if origin has troops left to attack
-        if self.graph.nodes[origin]["troops"] > 2:
-            print(f"Player {player} can attack again from {origin}\n")
+
+        # Check if the player has any country with more than 3 troops
+        if any(
+            self.graph.nodes[country]["troops"] > 3
+            for country in self.get_player_countries(player)
+        ):
+            print(f"Player {player} can attack\n")
             self.attack(player)
 
     def fortify(self, player: int):
@@ -654,6 +690,23 @@ class Board:
         ]
         if not destinations:
             return
+
+        # Check wich destinations are surrounded by player's countries only
+        peaceful_destinations = [
+            country
+            for country in destinations
+            if all(
+                neighbour in player_countries
+                for neighbour in list(self.graph.neighbors(country))
+            )
+        ]
+        if peaceful_destinations:
+            # Remove peaceful_destinations from the possible destinations:
+            for peaceful_destination in peaceful_destinations:
+                destinations.remove(peaceful_destination)
+        if not destinations:
+            return
+
         destination = random.choice(destinations)
         n_troops = random.randint(1, self.graph.nodes[origin]["troops"] - 1)
         print(
@@ -672,6 +725,13 @@ class Board:
         plt.pause(0.1)
         print("Fortification done\n")
 
+    def world_is_conquered(self):
+        players = [self.graph.nodes[country]["owner"] for country in self.graph.nodes]
+        if len(set(players)) == 1:
+            print(f"Player {players[0]} has conquered the world!")
+            return True
+        return False
+
     def turn(self, player: int):
         self.reinforce(player)
         print("\n")
@@ -684,12 +744,14 @@ class Board:
         plt.pause(0.1)
 
     def game(self):
-        for turn in range(1000):
+        turn = 0
+        while not self.world_is_conquered():
             for player in range(1, 7):
                 self.turn(player)
                 plt.pause(0.1)
                 self.update_info_panel()
                 plt.pause(0.1)
+                turn += 1
 
 
 if __name__ == "__main__":
