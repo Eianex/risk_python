@@ -3,6 +3,12 @@ import random
 import sys
 from typing import List, Tuple
 
+import matplotlib
+
+matplotlib.use("TkAgg")
+
+import tkinter as tk
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -20,6 +26,14 @@ color_map = {
     5: "purple",
     6: "orange",
 }
+
+
+def get_screen_size():
+    root = tk.Tk()
+    width = root.winfo_screenwidth()
+    height = root.winfo_screenheight()
+    root.destroy()
+    return width, height
 
 
 def get_troops_updates(G1: nx.Graph, G2: nx.Graph) -> List[Tuple[str, int]]:
@@ -61,6 +75,13 @@ class Board:
         plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
         plt.margins(0, 0)
         plt.ion()
+
+        screen_width, screen_height = get_screen_size()
+        fig_width, fig_height = (1706, 720)
+        fig_x = (screen_width // 2) - (fig_width // 2)
+        fig_y = (screen_height // 2) - (fig_height // 2) - 50
+
+        self.fig.canvas.manager.window.wm_geometry(f"+{fig_x}+{fig_y}")
 
         self.board_ax.set_xlim([0, 1280])
         self.board_ax.set_ylim([0, 720])
