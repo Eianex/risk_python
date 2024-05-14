@@ -381,7 +381,7 @@ class Board:
             country = list_of_countries[player - 1]
             self.update_owner(country, player)
             self.update_troops(country, 1)
-            plt.pause(0.01)
+            plt.pause(0.1)
 
         # Keep track of the number of troops for each player
         players_troops = {
@@ -419,7 +419,7 @@ class Board:
                     selected_country, self.graph.nodes[selected_country]["troops"] + 1
                 )
                 players_troops[player] += 1
-                plt.pause(0.01)
+                plt.pause(0.1)
 
     def update_info_panel(self):
         self.info_ax.clear()
@@ -593,12 +593,12 @@ class Board:
             troops = random.randint(1, reinforce_troops)
             reinforce_troops -= troops
             self.clear_highlighted_country()
-            plt.pause(0.3)
+            plt.pause(0.1)
             self.highlight_country(country)
-            plt.pause(0.5)
+            plt.pause(0.1)
             print(f"Player {player} is reinforcing {country} with {troops} troops")
             self.update_troops(country, self.graph.nodes[country]["troops"] + troops)
-            plt.pause(1.5)
+            plt.pause(0.1)
             self.clear_highlighted_country()
             plt.pause(0.1)
             print("Reinforcement done")
@@ -614,16 +614,25 @@ class Board:
 
         self.clear_highlighted_edge()
         self.clear_highlighted_country()
-        plt.pause(0.3)
+        plt.pause(0.1)
         self.highlight_country(origin)
         self.highlight_edge((origin, destination))
-        plt.pause(0.5)
+        plt.pause(0.1)
         self.roll_attack_once(origin, destination)
-        plt.pause(1.5)
+        plt.pause(0.1)
         self.clear_highlighted_edge()
         self.clear_highlighted_country()
         plt.pause(0.1)
         print("Attack done")
+        # Check if the player conquered a country
+        if self.graph.nodes[destination]["owner"] == player:
+            # If so, attack again
+            print(f"Player {player} conquered {destination} and can attack again\n")
+            self.attack(player)
+        # Check if origin has troops left to attack
+        if self.graph.nodes[origin]["troops"] > 2:
+            print(f"Player {player} can attack again from {origin}\n")
+            self.attack(player)
 
     def fortify(self, player: int):
         player_countries = self.get_player_countries(player)
@@ -652,12 +661,12 @@ class Board:
         )
         self.clear_highlighted_country()
         self.clear_highlighted_edge()
-        plt.pause(0.3)
+        plt.pause(0.1)
         self.highlight_country(destination)
         self.highlight_edge_slightly((origin, destination))
-        plt.pause(0.6)
+        plt.pause(0.1)
         self.fortify_graph(origin, destination, n_troops)
-        plt.pause(1.5)
+        plt.pause(0.1)
         self.clear_highlighted_country()
         self.clear_highlighted_edge()
         plt.pause(0.1)
@@ -688,6 +697,6 @@ if __name__ == "__main__":
     board = Board()
     board.populate_initial_board()
     print("Initial board populated.")
-    plt.pause(1)
+    plt.pause(0.1)
     board.game()
-    plt.pause(2)
+    plt.pause(0.1)
