@@ -794,6 +794,26 @@ class Board:
                 lowest_names = pair_attack
 
         origin, destination = lowest_names
+
+        destination_neighbours = list(self.graph.neighbors(destination))
+
+        player_countries_of_destination_neighbours = [
+            country
+            for country in destination_neighbours
+            if self.graph.nodes[country]["owner"] == player
+        ]
+
+        maximum_troops_neighbour = ""
+        if len(player_countries_of_destination_neighbours) > 1:
+            maximum_troops_neighbour_player = 0
+            for country in player_countries_of_destination_neighbours:
+                troops = self.graph.nodes[country]["troops"]
+                if troops > maximum_troops_neighbour_player:
+                    maximum_troops_neighbour_player = troops
+                    maximum_troops_neighbour = country
+        if maximum_troops_neighbour and maximum_troops_neighbour != "":
+            origin = maximum_troops_neighbour
+
         print(
             f"Player {player} is attacking from {origin} to {destination} with {self.graph.nodes[origin]['troops']} troops"
         )
