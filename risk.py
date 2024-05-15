@@ -87,7 +87,7 @@ class Board:
         self.fig.canvas.manager.set_window_title("Risk Simulator")
 
         root = self.fig.canvas.manager.window
-        icon_path = os.path.join(os.path.dirname(__file__), "img", "r.png")
+        icon_path = os.path.join(os.path.dirname(__file__), "img", "icon.png")
         icon_image = Image.open(icon_path)
         img_icon = ImageTk.PhotoImage(icon_image)
         root.tk.call("wm", "iconphoto", root._w, img_icon)
