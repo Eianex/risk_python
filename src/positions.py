@@ -1,6 +1,6 @@
 positions = {
     "Alaska": (124, 630),
-    "Northwest Territory": (234, 627),
+    "Northwest Territory": (258, 630),
     "Greenland": (444, 666),
     "Alberta": (208, 576),
     "Ontario": (284, 563),

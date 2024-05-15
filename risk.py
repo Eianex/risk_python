@@ -3,10 +3,17 @@ import random
 import sys
 from typing import List, Tuple
 
+import matplotlib
+
+matplotlib.use("TkAgg")
+
+import tkinter as tk
+
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.collections import LineCollection
+from PIL import Image, ImageTk
 
 from src.init_graph import init_graph
 from src.positions import continents, positions
@@ -22,36 +29,13 @@ color_map = {
 }
 
 
-def get_troops_updates(G1: nx.Graph, G2: nx.Graph) -> List[Tuple[str, int]]:
-    country_names = list(G1.nodes)
-    troops_updates = []
-    print(f"{G1==G2}")
-    for country in country_names:
-        troops1 = G1.nodes[country]["troops"]
-        troops2 = G2.nodes[country]["troops"]
-        if troops1 != troops2:
-            print(f"Troops in {country} changed from {troops1} to {troops2}")
-            troops_updates.append((country, troops2))
-    return troops_updates
-
-
-def get_owner_updates(G1: nx.Graph, G2: nx.Graph) -> List[Tuple[str, int]]:
-    country_names = list(G1.nodes)
-    owner_updates = []
-    for country in country_names:
-        owner1 = G1.nodes[country]["owner"]
-        owner2 = G2.nodes[country]["owner"]
-        if owner1 != owner2:
-            print(f"Owner of {country} changed from {owner1} to {owner2}")
-            owner_updates.append((country, owner2))
-    return owner_updates
-
-
 class Board:
     """Create the board with a graph."""
 
     def __init__(self):
         self.graph = init_graph()
+        self.deck_of_cards = self.fresh_deck_of_cards()
+        self.game_turn = 0
         self.highlighted_country = None
         self.fig = plt.figure(figsize=(17.06, 7.2))
         gs = gridspec.GridSpec(1, 2, width_ratios=[3, 1], figure=self.fig)
@@ -60,6 +44,20 @@ class Board:
         plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
         plt.margins(0, 0)
         plt.ion()
+
+        screen_width, screen_height = self.get_screen_size()
+        fig_width, fig_height = (1706, 720)
+        fig_x = (screen_width // 2) - (fig_width // 2)
+        fig_y = (screen_height // 2) - (fig_height // 2) - 50
+
+        self.fig.canvas.manager.window.wm_geometry(f"+{fig_x}+{fig_y}")
+        self.fig.canvas.manager.set_window_title("Risk Simulator")
+
+        root = self.fig.canvas.manager.window
+        icon_path = os.path.join(os.path.dirname(__file__), "img", "icon.png")
+        icon_image = Image.open(icon_path)
+        img_icon = ImageTk.PhotoImage(icon_image)
+        root.tk.call("wm", "iconphoto", root._w, img_icon)
 
         self.board_ax.set_xlim([0, 1280])
         self.board_ax.set_ylim([0, 720])
@@ -104,8 +102,136 @@ class Board:
         )
         self.update_info_panel()
 
-    def handle_close(self, evt):
+    @staticmethod
+    def get_screen_size():
+        root = tk.Tk()
+        width = root.winfo_screenwidth()
+        height = root.winfo_screenheight()
+        root.destroy()
+        return width, height
+
+    @staticmethod
+    def dice_roll() -> int:
+        return random.randint(1, 6)
+
+    @staticmethod
+    def handle_close(evt):
         sys.exit()
+
+    def get_card_type(self, country) -> int:
+        """Get the card_type of a country."""
+        # print(f"Getting card type of {country}")
+        if country == "Joker1" or country == "Joker2":
+            return 0
+        return self.graph.nodes[country]["card_type"]
+
+    def fresh_deck_of_cards(self) -> dict:
+        """Generate a deck of cards with the countries and theis card_type."""
+        deck = {
+            country: {
+                "card_type": self.get_card_type(country),
+                "card_owner": 0,
+            }
+            for country in self.graph.nodes
+        }
+        # Add two joker cards to the deck
+        deck["Joker1"] = {"card_type": 0, "card_owner": 0}
+        deck["Joker2"] = {"card_type": 0, "card_owner": 0}
+        return deck
+
+    def get_player_cards(self, player: int) -> list:
+        player_cards = [
+            card
+            for card in self.deck_of_cards
+            if self.deck_of_cards[card]["card_owner"] == player
+        ]
+        return player_cards
+
+    def return_card_to_deck(self, card: str):
+        self.deck_of_cards[card]["card_owner"] = 0
+
+    def return_cards_to_deck(self, cards: list):
+        for card in cards:
+            self.return_card_to_deck(card)
+
+    def calculate_bonus_troops(self, combination) -> int:
+        bonus = 0
+        cards_dict = {card: self.get_card_type(card) for card in combination}
+        if len(set(cards_dict.values())) == 3:
+            bonus = 10
+        elif len(set(cards_dict.values())) == 1:
+            card_type = list(cards_dict.values())[0]
+            if card_type == 1:
+                bonus = 4
+            elif card_type == 2:
+                bonus = 6
+            elif card_type == 3:
+                bonus = 8
+        return bonus
+
+    def cards_handler(self, player: int):
+        players_cards = self.get_player_cards(player)
+        n_cards = len(players_cards)
+        if n_cards < 5:
+            return 0
+
+        bonus_troops = 0
+        player_has_joker1 = "Joker1" in players_cards
+        player_has_joker2 = "Joker2" in players_cards
+        player_countries = self.get_player_countries(player)
+        player_countries_with_card = []
+        for country in player_countries:
+            if country in players_cards:
+                player_countries_with_card.append(country)
+
+        # Generate all the possible combinations of three cards 3 of the current player
+        possible_combinations = []
+        for i in range(n_cards):
+            for j in range(i + 1, n_cards):
+                for k in range(j + 1, n_cards):
+                    possible_combinations.append(
+                        (players_cards[i], players_cards[j], players_cards[k])
+                    )
+
+        possible_combinations_bonus = {}
+        # Go through all the possible combinations and check their corresponding troop bonuses, or absence of bonus (zero)
+        for combination in possible_combinations:
+            bonus_troops = self.calculate_bonus_troops(combination)
+            possible_combinations_bonus[tuple(combination)] = bonus_troops
+        # Sort the possible combinations by the bonus troops
+        sorted_combinations = sorted(
+            possible_combinations_bonus.items(), key=lambda x: x[1], reverse=True
+        )
+        maximum_bonus = sorted_combinations[0][1]
+        # If the maximum bonus combination has a Joker in it, check if for the same bonus there is a combination without the Joker
+        same_bonus_combos = [
+            combination
+            for combination, bonus in sorted_combinations
+            if bonus == maximum_bonus
+        ]
+        # Check if there is more than 1 combination with the maximum bonus
+        if len(same_bonus_combos) > 1:
+            if player_has_joker1 or player_has_joker2:
+                for combination in same_bonus_combos:
+                    if "Joker1" in combination or "Joker2" in combination:
+                        same_bonus_combos.remove(combination)
+            if same_bonus_combos:
+                maximum_bonus_combination = same_bonus_combos[0]
+            else:
+                maximum_bonus_combination = random.choice(same_bonus_combos)
+        else:
+            maximum_bonus_combination = sorted_combinations[0][0]
+
+        for card in maximum_bonus_combination:
+            if card in player_countries_with_card:
+                bonus_troops = self.update_troops(
+                    card, self.graph.nodes[card]["troops"] + 2
+                )
+
+        bonus_troops = possible_combinations_bonus[maximum_bonus_combination]
+        self.return_cards_to_deck(list(maximum_bonus_combination))
+
+        return bonus_troops
 
     def get_nodes_colors(self) -> List[str]:
         return [
@@ -425,17 +551,36 @@ class Board:
         self.info_ax.clear()
         self.info_ax.axis("off")
         player_data = self.calculate_player_stats()
-        info_text = ""
+        info_text = f"\n\nTURN: {self.game_turn}\n\n"
         for player, data in player_data.items():
-            info_text += f"PLAYER {player}: {str(color_map[player]).capitalize()}\nTroops: {data['troops']}\nTerritories: {data['territories']}\n\n"
+            info_text += f"{player}. {str(color_map[player]).capitalize()} - Troops: {data['troops']}\nTerritories: {data['territories']}\n"
+
+            player_cards = self.get_player_cards(player)
+            last_two_cards = []
+            if len(player_cards) == 0:
+                info_text += f"Cards:\n\n\n\n"
+            elif len(player_cards) <= 1:
+                info_text += f"Cards: |{player_cards[0]}|\n\n\n\n"
+            elif len(player_cards) == 2 or len(player_cards) == 3:
+                first_card = player_cards[0]
+                next_two_cards = player_cards[1:]
+                info_text += (
+                    f"Cards: |{first_card}|\n|{'| |'.join(next_two_cards)}|\n\n\n"
+                )
+            else:
+                first_card = player_cards[0]
+                next_two_cards = player_cards[1:3]
+                last_two_cards = player_cards[3:]
+                info_text += f"Cards: |{first_card}|\n|{'| |'.join(next_two_cards)}|\n|{'| |'.join(last_two_cards)}|\n\n"
+
         self.info_ax.text(
-            0.5,
+            0.14,
             0.5,
             info_text,
             transform=self.info_ax.transAxes,
-            ha="center",
+            ha="left",
             va="center",
-            fontsize=14,
+            fontsize=11,
             family="monospace",
         )
 
@@ -451,10 +596,6 @@ class Board:
             troops = sum(self.graph.nodes[node]["troops"] for node in territories)
             stats[player] = {"troops": troops, "territories": len(territories)}
         return stats
-
-    @staticmethod
-    def dice_roll() -> int:
-        return random.randint(1, 6)
 
     def path_exists(self, origin: str, destination: str, owner: int) -> bool:
         # nx.has_path(self.graph, origin, destination)
@@ -481,7 +622,7 @@ class Board:
             owner_of_country = self.graph.nodes[country]["owner"]
             if owner_of_country == player:
                 player_countries.append(country)
-        print(f"Player {player} has countries {player_countries}")
+        # print(f"Player {player} has countries {player_countries}")
         return player_countries
 
     def dice_rolls_defense(self, country: str) -> List[int]:
@@ -594,6 +735,11 @@ class Board:
         player_countries = self.get_player_countries(player)
         if not player_countries:
             return
+        cards_bonus = self.cards_handler(player)
+        print(f"Player {player} got {cards_bonus} troops from cards")
+        reinforce_troops += cards_bonus
+        if cards_bonus and cards_bonus > 0:
+            plt.pause(0.1)
         while reinforce_troops > 0:
             player_countries_copy = player_countries.copy()
             peaceful_destinations = [
@@ -626,7 +772,7 @@ class Board:
             plt.pause(0.1)
             print("Reinforcement done")
 
-    def attack(self, player: int):
+    def attack(self, player: int, already_card=False):
         possible_attacks = self.get_attacks(player)
         if not possible_attacks:
             return
@@ -643,6 +789,26 @@ class Board:
                 lowest_names = pair_attack
 
         origin, destination = lowest_names
+
+        destination_neighbours = list(self.graph.neighbors(destination))
+
+        player_countries_of_destination_neighbours = [
+            country
+            for country in destination_neighbours
+            if self.graph.nodes[country]["owner"] == player
+        ]
+
+        maximum_troops_neighbour = ""
+        if len(player_countries_of_destination_neighbours) > 1:
+            maximum_troops_neighbour_player = 0
+            for country in player_countries_of_destination_neighbours:
+                troops = self.graph.nodes[country]["troops"]
+                if troops > maximum_troops_neighbour_player:
+                    maximum_troops_neighbour_player = troops
+                    maximum_troops_neighbour = country
+        if maximum_troops_neighbour and maximum_troops_neighbour != "":
+            origin = maximum_troops_neighbour
+
         print(
             f"Player {player} is attacking from {origin} to {destination} with {self.graph.nodes[origin]['troops']} troops"
         )
@@ -659,14 +825,29 @@ class Board:
         self.clear_highlighted_country()
         plt.pause(0.1)
         print("Attack done")
+
         # Check if the player conquered a country
+        local_already_card = already_card
+        if (self.graph.nodes[destination]["owner"] == player) and not already_card:
+            # Change a random card owner but only cards which have not been assigned yet
+            cards = [
+                card
+                for card in self.deck_of_cards
+                if self.deck_of_cards[card]["card_owner"] == 0
+            ]
+            if cards:
+                random_card = random.choice(cards)
+                self.deck_of_cards[random_card]["card_owner"] = player
+                print(f"Player {player} got the card {random_card}")
+            local_already_card = True
+
         if (self.graph.nodes[destination]["owner"] == player) and (
             self.graph.nodes[origin]["troops"] > 2
         ):
             print(
                 f"Player {player} conquered {destination} and has troops for attacking again.\n"
             )
-            self.attack(player)
+            self.attack(player, already_card=local_already_card)
 
         # Check if the player has any country with more than 3 troops
         if any(
@@ -674,7 +855,7 @@ class Board:
             for country in self.get_player_countries(player)
         ):
             print(f"Player {player} can attack\n")
-            self.attack(player)
+            self.attack(player, already_card=local_already_card)
 
     def fortify(self, player: int):
         player_countries = self.get_player_countries(player)
@@ -759,14 +940,20 @@ class Board:
         plt.pause(0.1)
 
     def game(self):
-        turn = 0
+        self.game_turn += 1
+        plt.pause(0.1)
+        self.update_info_panel()
+        plt.pause(0.1)
         while not self.world_is_conquered():
             for player in range(1, 7):
                 self.turn(player)
                 plt.pause(0.1)
                 self.update_info_panel()
                 plt.pause(0.1)
-                turn += 1
+            self.game_turn += 1
+            plt.pause(0.1)
+            self.update_info_panel()
+            plt.pause(0.1)
 
 
 if __name__ == "__main__":
