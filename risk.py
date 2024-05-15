@@ -839,6 +839,9 @@ class Board:
                     self.get_player_cards(destination_owner_before_attack), player
                 )
                 self.reinforce(player, after_elimination=True)
+                plt.pause(0.1)
+                self.reinforce(player, after_elimination=True)
+                plt.pause(0.1)
 
         # Check if the player conquered a country
         local_already_card = already_card
