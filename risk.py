@@ -154,6 +154,13 @@ class Board:
         for card in cards:
             self.return_card_to_deck(card)
 
+    def change_card_owner(self, card: str, player: int):
+        self.deck_of_cards[card]["card_owner"] = player
+
+    def change_cards_owner(self, cards: list, player: int):
+        for card in cards:
+            self.change_card_owner(card, player)
+
     def calculate_bonus_troops(self, combination) -> int:
         bonus = 0
         cards_dict = {card: self.get_card_type(card) for card in combination}
@@ -172,64 +179,60 @@ class Board:
     def cards_handler(self, player: int):
         players_cards = self.get_player_cards(player)
         n_cards = len(players_cards)
-        if n_cards < 5:
-            return 0
-
         bonus_troops = 0
-        player_has_joker1 = "Joker1" in players_cards
-        player_has_joker2 = "Joker2" in players_cards
-        player_countries = self.get_player_countries(player)
-        player_countries_with_card = []
-        for country in player_countries:
-            if country in players_cards:
-                player_countries_with_card.append(country)
+        if n_cards >= 5:
+            player_has_joker1 = "Joker1" in players_cards
+            player_has_joker2 = "Joker2" in players_cards
+            player_countries = self.get_player_countries(player)
+            player_countries_with_card = []
+            for country in player_countries:
+                if country in players_cards:
+                    player_countries_with_card.append(country)
 
-        # Generate all the possible combinations of three cards 3 of the current player
-        possible_combinations = []
-        for i in range(n_cards):
-            for j in range(i + 1, n_cards):
-                for k in range(j + 1, n_cards):
-                    possible_combinations.append(
-                        (players_cards[i], players_cards[j], players_cards[k])
-                    )
+            # Generate all the possible combinations of three cards 3 of the current player
+            possible_combinations = []
+            for i in range(n_cards):
+                for j in range(i + 1, n_cards):
+                    for k in range(j + 1, n_cards):
+                        possible_combinations.append(
+                            (players_cards[i], players_cards[j], players_cards[k])
+                        )
 
-        possible_combinations_bonus = {}
-        # Go through all the possible combinations and check their corresponding troop bonuses, or absence of bonus (zero)
-        for combination in possible_combinations:
-            bonus_troops = self.calculate_bonus_troops(combination)
-            possible_combinations_bonus[tuple(combination)] = bonus_troops
-        # Sort the possible combinations by the bonus troops
-        sorted_combinations = sorted(
-            possible_combinations_bonus.items(), key=lambda x: x[1], reverse=True
-        )
-        maximum_bonus = sorted_combinations[0][1]
-        # If the maximum bonus combination has a Joker in it, check if for the same bonus there is a combination without the Joker
-        same_bonus_combos = [
-            combination
-            for combination, bonus in sorted_combinations
-            if bonus == maximum_bonus
-        ]
-        # Check if there is more than 1 combination with the maximum bonus
-        if len(same_bonus_combos) > 1:
-            if player_has_joker1 or player_has_joker2:
-                for combination in same_bonus_combos:
-                    if "Joker1" in combination or "Joker2" in combination:
-                        same_bonus_combos.remove(combination)
-            if same_bonus_combos:
-                maximum_bonus_combination = same_bonus_combos[0]
+            possible_combinations_bonus = {}
+            # Go through all the possible combinations and check their corresponding troop bonuses, or absence of bonus (zero)
+            for combination in possible_combinations:
+                local_bonus_troops = self.calculate_bonus_troops(combination)
+                possible_combinations_bonus[tuple(combination)] = local_bonus_troops
+            # Sort the possible combinations by the bonus troops
+            sorted_combinations = sorted(
+                possible_combinations_bonus.items(), key=lambda x: x[1], reverse=True
+            )
+            maximum_bonus = sorted_combinations[0][1]
+            # If the maximum bonus combination has a Joker in it, check if for the same bonus there is a combination without the Joker
+            same_bonus_combos = [
+                combination
+                for combination, bonus in sorted_combinations
+                if bonus == maximum_bonus
+            ]
+            # Check if there is more than 1 combination with the maximum bonus
+            if len(same_bonus_combos) > 1:
+                if player_has_joker1 or player_has_joker2:
+                    for combination in same_bonus_combos:
+                        if "Joker1" in combination or "Joker2" in combination:
+                            same_bonus_combos.remove(combination)
+                if same_bonus_combos:
+                    maximum_bonus_combination = same_bonus_combos[0]
+                else:
+                    maximum_bonus_combination = random.choice(same_bonus_combos)
             else:
-                maximum_bonus_combination = random.choice(same_bonus_combos)
-        else:
-            maximum_bonus_combination = sorted_combinations[0][0]
+                maximum_bonus_combination = sorted_combinations[0][0]
 
-        for card in maximum_bonus_combination:
-            if card in player_countries_with_card:
-                bonus_troops = self.update_troops(
-                    card, self.graph.nodes[card]["troops"] + 2
-                )
+            for card in maximum_bonus_combination:
+                if card in player_countries_with_card:
+                    self.update_troops(card, self.graph.nodes[card]["troops"] + 2)
 
-        bonus_troops = possible_combinations_bonus[maximum_bonus_combination]
-        self.return_cards_to_deck(list(maximum_bonus_combination))
+            bonus_troops += possible_combinations_bonus[maximum_bonus_combination]
+            self.return_cards_to_deck(list(maximum_bonus_combination))
 
         return bonus_troops
 
@@ -729,9 +732,11 @@ class Board:
         self.update_troops(country1, self.graph.nodes[country1]["troops"] - troops)
         self.update_troops(country2, self.graph.nodes[country2]["troops"] + troops)
 
-    def reinforce(self, player: int):
-        reinforce_troops: int = self.get_bonus_troops(player)
-        print(f"Player {player} has {reinforce_troops} troops to reinforce")
+    def reinforce(self, player: int, after_elimination=False):
+        reinforce_troops = 0
+        if not after_elimination:
+            reinforce_troops: int = self.get_bonus_troops(player)
+            print(f"Player {player} has {reinforce_troops} troops to reinforce")
         player_countries = self.get_player_countries(player)
         if not player_countries:
             return
@@ -819,12 +824,21 @@ class Board:
         self.highlight_country(origin)
         self.highlight_edge((origin, destination))
         plt.pause(0.1)
+        destination_owner_before_attack = self.graph.nodes[destination]["owner"]
         self.roll_attack_once(origin, destination)
+        destination_owner_after_attack = self.graph.nodes[destination]["owner"]
         plt.pause(0.1)
         self.clear_highlighted_edge()
         self.clear_highlighted_country()
         plt.pause(0.1)
         print("Attack done")
+
+        if destination_owner_before_attack != destination_owner_after_attack:
+            if self.get_player_countries(destination_owner_before_attack) == []:
+                self.change_cards_owner(
+                    self.get_player_cards(destination_owner_before_attack), player
+                )
+                self.reinforce(player, after_elimination=True)
 
         # Check if the player conquered a country
         local_already_card = already_card
@@ -930,28 +944,19 @@ class Board:
 
     def turn(self, player: int):
         self.reinforce(player)
-        print("\n")
-        plt.pause(0.1)
         self.attack(player)
-        print("\n")
-        plt.pause(0.1)
         self.fortify(player)
-        print("\n")
-        plt.pause(0.1)
 
     def game(self):
         self.game_turn += 1
-        plt.pause(0.1)
         self.update_info_panel()
         plt.pause(0.1)
         while not self.world_is_conquered():
             for player in range(1, 7):
                 self.turn(player)
-                plt.pause(0.1)
                 self.update_info_panel()
                 plt.pause(0.1)
             self.game_turn += 1
-            plt.pause(0.1)
             self.update_info_panel()
             plt.pause(0.1)
 
@@ -961,6 +966,4 @@ if __name__ == "__main__":
     board = Board()
     board.populate_initial_board()
     print("Initial board populated.")
-    plt.pause(0.1)
     board.game()
-    plt.pause(0.1)
