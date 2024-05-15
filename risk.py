@@ -318,19 +318,21 @@ class Board:
             ax=self.board_ax,
         )
 
-    def update_troops(self, country, troops):
+    def update_troops(self, country, troops, interactive=True):
         """Change the number of troops in a country."""
         self.graph.nodes[country]["troops"] = troops
-        self.highlight_country(country)
-        self.draw_troops()
-        self.update_info_panel()
+        if interactive:
+            self.highlight_country(country)
+            self.draw_troops()
+            self.update_info_panel()
 
-    def update_owner(self, country, owner):
+    def update_owner(self, country, owner, interactive=True):
         """Change the owner of a country."""
         self.graph.nodes[country]["owner"] = owner
-        self.highlight_country(country)
-        self.draw_nodes()
-        self.update_info_panel()
+        if interactive:
+            self.highlight_country(country)
+            self.draw_nodes()
+            self.update_info_panel()
 
     def highlight_edge(self, edge):
         """Update an edge of the graph."""
@@ -508,9 +510,8 @@ class Board:
         # Select one random country for each player to start
         for player in range(1, 7):
             country = list_of_countries[player - 1]
-            self.update_owner(country, player)
-            self.update_troops(country, 1)
-            plt.pause(0.1)
+            self.update_owner(country, player, interactive=False)
+            self.update_troops(country, 1, interactive=False)
 
         # Keep track of the number of troops for each player
         players_troops = {
@@ -545,10 +546,17 @@ class Board:
                     self.update_owner(selected_country, player)
 
                 self.update_troops(
-                    selected_country, self.graph.nodes[selected_country]["troops"] + 1
+                    selected_country,
+                    self.graph.nodes[selected_country]["troops"] + 1,
+                    interactive=False,
                 )
                 players_troops[player] += 1
-                plt.pause(0.1)
+
+        # Draw the troops on the board
+        self.draw_nodes()
+        self.draw_troops()
+        self.update_info_panel()
+        plt.pause(0.1)
 
     def update_info_panel(self):
         self.info_ax.clear()
