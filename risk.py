@@ -159,7 +159,7 @@ class Board:
         deck["Joker2"] = {"card_type": 0, "card_owner": 0}
         return deck
 
-    def get_players_cards(self, player: int) -> list:
+    def get_player_cards(self, player: int) -> list:
         player_cards = [
             card
             for card in self.deck_of_cards
@@ -190,7 +190,7 @@ class Board:
         return bonus
 
     def cards_handler(self, player: int):
-        players_cards = self.get_players_cards(player)
+        players_cards = self.get_player_cards(player)
         n_cards = len(players_cards)
         if n_cards < 5:
             return 0
@@ -571,17 +571,36 @@ class Board:
         self.info_ax.clear()
         self.info_ax.axis("off")
         player_data = self.calculate_player_stats()
-        info_text = f"TURN: {self.game_turn}\n\n"
+        info_text = f"\n\nTURN: {self.game_turn}\n\n"
         for player, data in player_data.items():
-            info_text += f"PLAYER {player}: {str(color_map[player]).capitalize()}\nTroops: {data['troops']}\nTerritories: {data['territories']}\n\n"
+            info_text += f"{player}. {str(color_map[player]).capitalize()} - Troops: {data['troops']}\nTerritories: {data['territories']}\n"
+
+            player_cards = self.get_player_cards(player)
+            last_two_cards = []
+            if len(player_cards) == 0:
+                info_text += f"Cards:\n\n\n\n"
+            elif len(player_cards) <= 1:
+                info_text += f"Cards: |{player_cards[0]}|\n\n\n\n"
+            elif len(player_cards) == 2 or len(player_cards) == 3:
+                first_card = player_cards[0]
+                next_two_cards = player_cards[1:]
+                info_text += (
+                    f"Cards: |{first_card}|\n|{'| |'.join(next_two_cards)}|\n\n\n"
+                )
+            else:
+                first_card = player_cards[0]
+                next_two_cards = player_cards[1:3]
+                last_two_cards = player_cards[3:]
+                info_text += f"Cards: |{first_card}|\n|{'| |'.join(next_two_cards)}|\n|{'| |'.join(last_two_cards)}|\n\n"
+
         self.info_ax.text(
-            0.5,
+            0.14,
             0.5,
             info_text,
             transform=self.info_ax.transAxes,
-            ha="center",
+            ha="left",
             va="center",
-            fontsize=14,
+            fontsize=11,
             family="monospace",
         )
 
