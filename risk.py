@@ -29,39 +29,6 @@ color_map = {
 }
 
 
-def get_screen_size():
-    root = tk.Tk()
-    width = root.winfo_screenwidth()
-    height = root.winfo_screenheight()
-    root.destroy()
-    return width, height
-
-
-def get_troops_updates(G1: nx.Graph, G2: nx.Graph) -> List[Tuple[str, int]]:
-    country_names = list(G1.nodes)
-    troops_updates = []
-    print(f"{G1==G2}")
-    for country in country_names:
-        troops1 = G1.nodes[country]["troops"]
-        troops2 = G2.nodes[country]["troops"]
-        if troops1 != troops2:
-            print(f"Troops in {country} changed from {troops1} to {troops2}")
-            troops_updates.append((country, troops2))
-    return troops_updates
-
-
-def get_owner_updates(G1: nx.Graph, G2: nx.Graph) -> List[Tuple[str, int]]:
-    country_names = list(G1.nodes)
-    owner_updates = []
-    for country in country_names:
-        owner1 = G1.nodes[country]["owner"]
-        owner2 = G2.nodes[country]["owner"]
-        if owner1 != owner2:
-            print(f"Owner of {country} changed from {owner1} to {owner2}")
-            owner_updates.append((country, owner2))
-    return owner_updates
-
-
 class Board:
     """Create the board with a graph."""
 
@@ -78,7 +45,7 @@ class Board:
         plt.margins(0, 0)
         plt.ion()
 
-        screen_width, screen_height = get_screen_size()
+        screen_width, screen_height = self.get_screen_size()
         fig_width, fig_height = (1706, 720)
         fig_x = (screen_width // 2) - (fig_width // 2)
         fig_y = (screen_height // 2) - (fig_height // 2) - 50
@@ -135,7 +102,20 @@ class Board:
         )
         self.update_info_panel()
 
-    def handle_close(self, evt):
+    @staticmethod
+    def get_screen_size():
+        root = tk.Tk()
+        width = root.winfo_screenwidth()
+        height = root.winfo_screenheight()
+        root.destroy()
+        return width, height
+
+    @staticmethod
+    def dice_roll() -> int:
+        return random.randint(1, 6)
+
+    @staticmethod
+    def handle_close(evt):
         sys.exit()
 
     def get_card_type(self, country) -> int:
@@ -616,10 +596,6 @@ class Board:
             troops = sum(self.graph.nodes[node]["troops"] for node in territories)
             stats[player] = {"troops": troops, "territories": len(territories)}
         return stats
-
-    @staticmethod
-    def dice_roll() -> int:
-        return random.randint(1, 6)
 
     def path_exists(self, origin: str, destination: str, owner: int) -> bool:
         # nx.has_path(self.graph, origin, destination)
