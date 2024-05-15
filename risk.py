@@ -13,6 +13,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.collections import LineCollection
+from PIL import Image, ImageTk
 
 from src.init_graph import init_graph
 from src.positions import continents, positions
@@ -67,6 +68,7 @@ class Board:
     def __init__(self):
         self.graph = init_graph()
         self.deck_of_cards = self.fresh_deck_of_cards()
+        self.game_turn = 0
         self.highlighted_country = None
         self.fig = plt.figure(figsize=(17.06, 7.2))
         gs = gridspec.GridSpec(1, 2, width_ratios=[3, 1], figure=self.fig)
@@ -82,6 +84,13 @@ class Board:
         fig_y = (screen_height // 2) - (fig_height // 2) - 50
 
         self.fig.canvas.manager.window.wm_geometry(f"+{fig_x}+{fig_y}")
+        self.fig.canvas.manager.set_window_title("Risk Simulator")
+
+        root = self.fig.canvas.manager.window
+        icon_path = os.path.join(os.path.dirname(__file__), "img", "r.png")
+        icon_image = Image.open(icon_path)
+        img_icon = ImageTk.PhotoImage(icon_image)
+        root.tk.call("wm", "iconphoto", root._w, img_icon)
 
         self.board_ax.set_xlim([0, 1280])
         self.board_ax.set_ylim([0, 720])
@@ -562,7 +571,7 @@ class Board:
         self.info_ax.clear()
         self.info_ax.axis("off")
         player_data = self.calculate_player_stats()
-        info_text = ""
+        info_text = f"TURN: {self.game_turn}\n\n"
         for player, data in player_data.items():
             info_text += f"PLAYER {player}: {str(color_map[player]).capitalize()}\nTroops: {data['troops']}\nTerritories: {data['territories']}\n\n"
         self.info_ax.text(
@@ -768,7 +777,7 @@ class Board:
             plt.pause(0.1)
             print("Reinforcement done")
 
-    def attack(self, player: int):
+    def attack(self, player: int, already_card=False):
         possible_attacks = self.get_attacks(player)
         if not possible_attacks:
             return
@@ -801,8 +810,10 @@ class Board:
         self.clear_highlighted_country()
         plt.pause(0.1)
         print("Attack done")
+
         # Check if the player conquered a country
-        if self.graph.nodes[destination]["owner"] == player:
+        local_already_card = already_card
+        if (self.graph.nodes[destination]["owner"] == player) and not already_card:
             # Change a random card owner but only cards which have not been assigned yet
             cards = [
                 card
@@ -813,6 +824,7 @@ class Board:
                 random_card = random.choice(cards)
                 self.deck_of_cards[random_card]["card_owner"] = player
                 print(f"Player {player} got the card {random_card}")
+            local_already_card = True
 
         if (self.graph.nodes[destination]["owner"] == player) and (
             self.graph.nodes[origin]["troops"] > 2
@@ -820,7 +832,7 @@ class Board:
             print(
                 f"Player {player} conquered {destination} and has troops for attacking again.\n"
             )
-            self.attack(player)
+            self.attack(player, already_card=local_already_card)
 
         # Check if the player has any country with more than 3 troops
         if any(
@@ -828,7 +840,7 @@ class Board:
             for country in self.get_player_countries(player)
         ):
             print(f"Player {player} can attack\n")
-            self.attack(player)
+            self.attack(player, already_card=local_already_card)
 
     def fortify(self, player: int):
         player_countries = self.get_player_countries(player)
@@ -913,14 +925,20 @@ class Board:
         plt.pause(0.1)
 
     def game(self):
-        turn = 0
+        self.game_turn += 1
+        plt.pause(0.1)
+        self.update_info_panel()
+        plt.pause(0.1)
         while not self.world_is_conquered():
             for player in range(1, 7):
                 self.turn(player)
                 plt.pause(0.1)
                 self.update_info_panel()
                 plt.pause(0.1)
-                turn += 1
+            self.game_turn += 1
+            plt.pause(0.1)
+            self.update_info_panel()
+            plt.pause(0.1)
 
 
 if __name__ == "__main__":
