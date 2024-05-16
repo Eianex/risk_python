@@ -1,6 +1,7 @@
 import os
 import random
 import sys
+import time
 import warnings
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -13,6 +14,7 @@ matplotlib.use("TkAgg")
 matplotlib.rcParams["toolbar"] = "toolmanager"
 
 import tkinter as tk
+from tkinter import TclError
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
@@ -35,8 +37,22 @@ color_map = {
 }
 
 
+paused = False
+
+
 class Pause(ToolBase):
     image = os.path.join(os.path.dirname(__file__), "img", "pause.png")
+
+    def trigger(self, sender, event, data=None):
+        global paused
+        paused = not paused
+        canvas = self.figure.canvas
+        root = canvas.manager.window
+
+        while paused:
+            root.update_idletasks()
+            root.update()
+            time.sleep(0.1)
 
 
 class Board:
@@ -46,7 +62,6 @@ class Board:
         self.graph = init_graph()
         self.deck_of_cards = self.fresh_deck_of_cards()
         self.game_turn = 0
-        self.paused = False
         self.highlighted_country = None
         self.fig = plt.figure(figsize=(17.06, 7.2))
         gs = gridspec.GridSpec(1, 2, width_ratios=[3, 1], figure=self.fig)
@@ -137,6 +152,8 @@ class Board:
 
     @staticmethod
     def handle_close(evt):
+        global paused
+        paused = False
         sys.exit()
 
     def get_card_type(self, country) -> int:
