@@ -6,12 +6,14 @@ from typing import List, Tuple
 import matplotlib
 
 matplotlib.use("TkAgg")
+matplotlib.rcParams["toolbar"] = "toolmanager"
 
 import tkinter as tk
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import networkx as nx
+from matplotlib.backend_tools import ToolBase
 from matplotlib.collections import LineCollection
 from PIL import Image, ImageTk
 
@@ -28,6 +30,8 @@ color_map = {
     6: "orange",
 }
 
+class Pause(ToolBase):
+    image = os.path.join(os.path.dirname(__file__), "img", "pause.png")
 
 class Board:
     """Create the board with a graph."""
@@ -58,7 +62,7 @@ class Board:
         icon_image = Image.open(icon_path)
         img_icon = ImageTk.PhotoImage(icon_image)
         root.tk.call("wm", "iconphoto", root._w, img_icon)
-
+        
         self.board_ax.set_xlim([0, 1280])
         self.board_ax.set_ylim([0, 720])
         self.board_ax.axis("off")
@@ -67,6 +71,16 @@ class Board:
         self.board_ax.imshow(img, extent=[0, 1280, 0, 720], aspect="equal")
         self.info_ax.axis("off")
         self.fig.canvas.mpl_connect("close_event", self.handle_close)
+
+        tm = self.fig.canvas.manager.toolmanager
+        tm.add_tool("pause", Pause)
+        self.fig.canvas.manager.toolbar.add_tool(tm.get_tool("pause"), "toolgroup")
+        # Position the toolbar postion at the bottom of the window
+        toolbar = self.fig.canvas.manager.toolbar
+        toolbar.pack_forget()
+
+        # Place the toolbar at the bottom
+        toolbar.pack(side=tk.BOTTOM, fill=tk.X)
 
         self.nodes = nx.draw_networkx_nodes(
             self.graph,
@@ -101,6 +115,9 @@ class Board:
             ax=self.board_ax,
         )
         self.update_info_panel()
+
+
+
 
     @staticmethod
     def get_screen_size():
