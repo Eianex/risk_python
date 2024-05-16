@@ -46,6 +46,7 @@ class Board:
         self.graph = init_graph()
         self.deck_of_cards = self.fresh_deck_of_cards()
         self.game_turn = 0
+        self.paused = False
         self.highlighted_country = None
         self.fig = plt.figure(figsize=(17.06, 7.2))
         gs = gridspec.GridSpec(1, 2, width_ratios=[3, 1], figure=self.fig)
