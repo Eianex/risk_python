@@ -4,17 +4,14 @@ import sys
 import time
 import warnings
 
-warnings.filterwarnings("ignore", category=UserWarning)
-
-from typing import List, Tuple
-
 import matplotlib
 
+warnings.filterwarnings("ignore", category=UserWarning)
 matplotlib.use("TkAgg")
 matplotlib.rcParams["toolbar"] = "toolmanager"
 
 import tkinter as tk
-from tkinter import TclError
+from typing import List, Tuple
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
@@ -26,6 +23,7 @@ from PIL import Image, ImageTk
 from src.init_graph import init_graph
 from src.positions import continents, positions
 
+paused = False
 color_map = {
     0: "white",  # "no owner"
     1: "red",
@@ -35,9 +33,6 @@ color_map = {
     5: "purple",
     6: "orange",
 }
-
-
-paused = False
 
 
 class Pause(ToolBase):
@@ -54,88 +49,59 @@ class Pause(ToolBase):
             root.update()
             time.sleep(0.1)
 
+    @staticmethod
+    def handle_close(evt):
+        global paused
+        paused = False
+        sys.exit()
+
 
 class Board:
-    """Create the board with a graph."""
-
     def __init__(self):
         self.graph = init_graph()
         self.deck_of_cards = self.fresh_deck_of_cards()
         self.game_turn = 0
         self.highlighted_country = None
+
         self.fig = plt.figure(figsize=(17.06, 7.2))
+        self.fig.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
         gs = gridspec.GridSpec(1, 2, width_ratios=[3, 1], figure=self.fig)
         self.board_ax = plt.subplot(gs[0])
         self.info_ax = plt.subplot(gs[1])
-        plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
-        plt.margins(0, 0)
         plt.ion()
+
+        self.canvas = self.fig.canvas
+        self.canvas_manager = self.canvas.manager
+        self.window = self.canvas_manager.window
+        self.tool_manager = self.canvas_manager.toolmanager
+        self.toolbar = self.canvas_manager.toolbar
+
+        self.canvas.mpl_connect("close_event", Pause.handle_close)
+        self.canvas_manager.set_window_title("Risk Simulator")
 
         screen_width, screen_height = self.get_screen_size()
         fig_width, fig_height = (1706, 720)
         fig_x = (screen_width // 2) - (fig_width // 2)
         fig_y = (screen_height // 2) - (fig_height // 2) - 50
+        self.window.wm_geometry(f"+{fig_x}+{fig_y}")
 
-        self.fig.canvas.manager.window.wm_geometry(f"+{fig_x}+{fig_y}")
-        self.fig.canvas.manager.set_window_title("Risk Simulator")
+        self.tool_manager.add_tool("pause", Pause)
+        self.toolbar.add_tool(self.tool_manager.get_tool("pause"), "toolgroup")
+        self.toolbar.pack_forget()
+        self.toolbar.pack(side=tk.BOTTOM, fill=tk.X)
 
-        root = self.fig.canvas.manager.window
         icon_path = os.path.join(os.path.dirname(__file__), "img", "icon.png")
         icon_image = Image.open(icon_path)
         img_icon = ImageTk.PhotoImage(icon_image)
-        root.tk.call("wm", "iconphoto", root._w, img_icon)
+        self.window.tk.call("wm", "iconphoto", self.window._w, img_icon)
 
-        self.board_ax.set_xlim([0, 1280])
-        self.board_ax.set_ylim([0, 720])
-        self.board_ax.axis("off")
         img_path = os.path.join(os.path.dirname(__file__), "img", "risk_720p.png")
         img = plt.imread(img_path)
         self.board_ax.imshow(img, extent=[0, 1280, 0, 720], aspect="equal")
-        self.info_ax.axis("off")
-        self.fig.canvas.mpl_connect("close_event", self.handle_close)
 
-        tm = self.fig.canvas.manager.toolmanager
-        tm.add_tool("pause", Pause)
-        self.fig.canvas.manager.toolbar.add_tool(tm.get_tool("pause"), "toolgroup")
-        # Position the toolbar postion at the bottom of the window
-        toolbar = self.fig.canvas.manager.toolbar
-        toolbar.pack_forget()
-
-        # Place the toolbar at the bottom
-        toolbar.pack(side=tk.BOTTOM, fill=tk.X)
-
-        self.nodes = nx.draw_networkx_nodes(
-            self.graph,
-            positions,
-            node_size=2000,
-            node_color=self.get_nodes_colors(),
-            alpha=0.60,
-            node_shape="o",
-            ax=self.board_ax,
-        )
-
-        self.edges = nx.draw_networkx_edges(
-            self.graph,
-            positions,
-            edgelist=self.get_edges_list(),
-            width=1,
-            edge_color="k",
-            style="dotted",
-            ax=self.board_ax,
-        )
-
-        self.troops = nx.draw_networkx_labels(
-            self.graph,
-            positions,
-            font_size=12,
-            font_color="black",
-            font_weight="bold",
-            labels=self.get_troops_dict(),
-            verticalalignment="center",
-            horizontalalignment="center",
-            font_family="monospace",
-            ax=self.board_ax,
-        )
+        self.nodes = self.draw_network_nodes()
+        self.edges = self.draw_network_edges()
+        self.troops = self.draw_network_lables()
         self.update_info_panel()
 
     @staticmethod
@@ -150,21 +116,12 @@ class Board:
     def dice_roll() -> int:
         return random.randint(1, 6)
 
-    @staticmethod
-    def handle_close(evt):
-        global paused
-        paused = False
-        sys.exit()
-
     def get_card_type(self, country) -> int:
-        """Get the card_type of a country."""
-        # print(f"Getting card type of {country}")
         if country == "Joker1" or country == "Joker2":
             return 0
         return self.graph.nodes[country]["card_type"]
 
     def fresh_deck_of_cards(self) -> dict:
-        """Generate a deck of cards with the countries and theis card_type."""
         deck = {
             country: {
                 "card_type": self.get_card_type(country),
@@ -172,32 +129,16 @@ class Board:
             }
             for country in self.graph.nodes
         }
-        # Add two joker cards to the deck
         deck["Joker1"] = {"card_type": 0, "card_owner": 0}
         deck["Joker2"] = {"card_type": 0, "card_owner": 0}
         return deck
 
     def get_player_cards(self, player: int) -> list:
-        player_cards = [
+        return [
             card
             for card in self.deck_of_cards
             if self.deck_of_cards[card]["card_owner"] == player
         ]
-        return player_cards
-
-    def return_card_to_deck(self, card: str):
-        self.deck_of_cards[card]["card_owner"] = 0
-
-    def return_cards_to_deck(self, cards: list):
-        for card in cards:
-            self.return_card_to_deck(card)
-
-    def change_card_owner(self, card: str, player: int):
-        self.deck_of_cards[card]["card_owner"] = player
-
-    def change_cards_owner(self, cards: list, player: int):
-        for card in cards:
-            self.change_card_owner(card, player)
 
     def calculate_bonus_troops(self, combination) -> int:
         bonus = 0
@@ -270,7 +211,8 @@ class Board:
                     self.update_troops(card, self.graph.nodes[card]["troops"] + 2)
 
             bonus_troops += possible_combinations_bonus[maximum_bonus_combination]
-            self.return_cards_to_deck(list(maximum_bonus_combination))
+            for card in list(maximum_bonus_combination):
+                self.deck_of_cards[card]["card_owner"] = 0
 
         return bonus_troops
 
@@ -294,10 +236,8 @@ class Board:
     def get_troops_dict(self) -> dict:
         return {node: self.graph.nodes[node]["troops"] for node in self.graph.nodes}
 
-    def draw_nodes(self):
-        if self.nodes:
-            self.nodes.remove()
-        self.nodes = nx.draw_networkx_nodes(
+    def draw_network_nodes(self):
+        return nx.draw_networkx_nodes(
             self.graph,
             positions,
             node_size=2000,
@@ -307,14 +247,8 @@ class Board:
             ax=self.board_ax,
         )
 
-    def draw_edges(self):
-        if self.edges:
-            if isinstance(self.edges, list):
-                for coll in self.edges:
-                    coll.remove()
-            else:
-                self.edges.remove()
-        self.edges = nx.draw_networkx_edges(
+    def draw_network_edges(self):
+        return nx.draw_networkx_edges(
             self.graph,
             positions,
             edgelist=self.get_edges_list(),
@@ -324,11 +258,8 @@ class Board:
             ax=self.board_ax,
         )
 
-    def draw_troops(self):
-        if self.troops:
-            for label in self.troops.values():
-                label.remove()
-        self.troops = nx.draw_networkx_labels(
+    def draw_network_lables(self):
+        return nx.draw_networkx_labels(
             self.graph,
             positions,
             font_size=12,
@@ -340,6 +271,26 @@ class Board:
             font_family="monospace",
             ax=self.board_ax,
         )
+
+    def draw_nodes(self):
+        if self.nodes:
+            self.nodes.remove()
+        self.nodes = self.draw_network_nodes()
+
+    def draw_edges(self):
+        if self.edges:
+            if isinstance(self.edges, list):
+                for coll in self.edges:
+                    coll.remove()
+            else:
+                self.edges.remove()
+        self.edges = self.draw_network_edges()
+
+    def draw_troops(self):
+        if self.troops:
+            for label in self.troops.values():
+                label.remove()
+        self.troops = self.draw_network_lables()
 
     def draw_country_names(self):
         """Draw the country names as labels of the graph nodes with a formatted text."""
@@ -485,7 +436,6 @@ class Board:
         self.edges = [default_edges, highlighted_edge]
 
     def highlight_country(self, country):
-        """Highlight a country in the self."""
         self.clear_highlighted_country()
         self.highlighted_country = nx.draw_networkx_nodes(
             self.graph,
@@ -502,13 +452,11 @@ class Board:
         self.highlighted_country.set_zorder(1)
 
     def clear_highlighted_country(self):
-        """Clear the highlighted country."""
         if self.highlighted_country:
             self.highlighted_country.remove()
             self.highlighted_country = None
 
     def clear_highlighted_edge(self):
-        """Clear the highlighted edge."""
         if self.edges:
             if isinstance(self.edges, list):
                 for coll in self.edges:
@@ -531,17 +479,14 @@ class Board:
         )
 
     def randomize_country(self, country):
-        """Randomize the number of troops in a country."""
         self.update_troops(country, random.randint(1, 10))
         self.update_owner(country, random.randint(1, 6))
 
     def randomize_board(self):
-        """Randomize the number of troops in all countries."""
         for country in self.graph.nodes:
             self.randomize_country(country)
 
     def populate_initial_board(self):
-        """Populate the board with the initial number of troops."""
         list_of_countries = list(self.graph.nodes)
         random.shuffle(list_of_countries)
 
@@ -590,11 +535,22 @@ class Board:
                 )
                 players_troops[player] += 1
 
-        # Draw the troops on the board
         self.draw_nodes()
         self.draw_troops()
         self.update_info_panel()
         plt.pause(0.1)
+
+    def calculate_player_stats(self):
+        stats = {}
+        for player in range(1, 7):
+            territories = [
+                node
+                for node in self.graph.nodes
+                if self.graph.nodes[node].get("owner") == player
+            ]
+            troops = sum(self.graph.nodes[node]["troops"] for node in territories)
+            stats[player] = {"troops": troops, "territories": len(territories)}
+        return stats
 
     def update_info_panel(self):
         self.info_ax.clear()
@@ -633,22 +589,7 @@ class Board:
             family="monospace",
         )
 
-    def calculate_player_stats(self):
-        """Calculate troops and territories for each player."""
-        stats = {}
-        for player in range(1, 7):
-            territories = [
-                node
-                for node in self.graph.nodes
-                if self.graph.nodes[node].get("owner") == player
-            ]
-            troops = sum(self.graph.nodes[node]["troops"] for node in territories)
-            stats[player] = {"troops": troops, "territories": len(territories)}
-        return stats
-
     def path_exists(self, origin: str, destination: str, owner: int) -> bool:
-        # nx.has_path(self.graph, origin, destination)
-        # Analogous function to has_path but with the owner condition per connection between nodes
         visited = {origin}
         stack = [origin]
         while stack:
@@ -671,7 +612,6 @@ class Board:
             owner_of_country = self.graph.nodes[country]["owner"]
             if owner_of_country == player:
                 player_countries.append(country)
-        # print(f"Player {player} has countries {player_countries}")
         return player_countries
 
     def dice_rolls_defense(self, country: str) -> List[int]:
@@ -727,7 +667,6 @@ class Board:
             if self.graph.nodes[country]["troops"] > 2
         ]
         if not countries_for_attack:
-            # print("No countries to attack from")
             return []
         neighbour_pairs = [
             (country, neighbour)
@@ -774,10 +713,6 @@ class Board:
                     self.update_troops(attacker, 1 + leave_troops_behind)
                     break
 
-    def fortify_graph(self, country1, country2, troops):
-        self.update_troops(country1, self.graph.nodes[country1]["troops"] - troops)
-        self.update_troops(country2, self.graph.nodes[country2]["troops"] + troops)
-
     def reinforce(self, player: int, after_elimination=False):
         reinforce_troops = 0
         if not after_elimination:
@@ -802,7 +737,6 @@ class Board:
                 )
             ]
             if peaceful_destinations:
-                # Remove peaceful_destinations from the possible destinations:
                 for peaceful_destination in peaceful_destinations:
                     player_countries_copy.remove(peaceful_destination)
 
@@ -827,7 +761,6 @@ class Board:
         possible_attacks = self.get_attacks(player)
         if not possible_attacks:
             return
-        # Shuffle the possible attacks list of tuples to randomize the order
         possible_attacks = random.sample(possible_attacks, len(possible_attacks))
 
         lowest_attack = (999, 999)
@@ -881,9 +814,8 @@ class Board:
 
         if destination_owner_before_attack != destination_owner_after_attack:
             if self.get_player_countries(destination_owner_before_attack) == []:
-                self.change_cards_owner(
-                    self.get_player_cards(destination_owner_before_attack), player
-                )
+                for card in self.get_player_cards(destination_owner_before_attack):
+                    self.deck_of_cards[card]["card_owner"] = player
                 self.reinforce(player, after_elimination=True)
                 plt.pause(0.1)
                 self.reinforce(player, after_elimination=True)
@@ -977,32 +909,31 @@ class Board:
         self.highlight_country(destination)
         self.highlight_edge_slightly((origin, destination))
         plt.pause(0.1)
-        self.fortify_graph(origin, destination, n_troops)
+        self.update_troops(origin, self.graph.nodes[destination]["troops"] - n_troops)
+        self.update_troops(origin, self.graph.nodes[destination]["troops"] + n_troops)
         plt.pause(0.1)
         self.clear_highlighted_country()
         self.clear_highlighted_edge()
         plt.pause(0.1)
         print("Fortification done\n")
 
-    def world_is_conquered(self):
+    def world_is_conquered(self) -> bool:
         players = [self.graph.nodes[country]["owner"] for country in self.graph.nodes]
         if len(set(players)) == 1:
             print(f"Player {players[0]} has conquered the world!")
             return True
         return False
 
-    def turn(self, player: int):
-        self.reinforce(player)
-        self.attack(player)
-        self.fortify(player)
-
     def game(self):
+        self.populate_initial_board()
         self.game_turn += 1
         self.update_info_panel()
         plt.pause(0.1)
         while not self.world_is_conquered():
             for player in range(1, 7):
-                self.turn(player)
+                self.reinforce(player)
+                self.attack(player)
+                self.fortify(player)
                 self.update_info_panel()
                 plt.pause(0.1)
             self.game_turn += 1
@@ -1013,6 +944,4 @@ class Board:
 if __name__ == "__main__":
 
     board = Board()
-    board.populate_initial_board()
-    print("Initial board populated.")
     board.game()
