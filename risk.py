@@ -46,18 +46,38 @@ class Pause(ToolBase):
 
 class Board:
     def __init__(self):
-        self.graph = init_graph()
+        self.G = init_graph()
         self.deck_of_cards = self.fresh_deck_of_cards()
         self.game_turn = 0
         self.highlighted_country = None
 
         self.fig = plt.figure(figsize=(17.06, 7.2))
-        self.fig.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+        self._fig_canvas()
+
         gs = gridspec.GridSpec(1, 2, width_ratios=[3, 1], figure=self.fig)
         self.board_ax = plt.subplot(gs[0])
         self.info_ax = plt.subplot(gs[1])
+        self.fig.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0, wspace=0)
+
+        # Draw the risk map image
+        self.board_ax.imshow(
+            plt.imread(os.path.join(os.path.dirname(__file__), "img", "risk_720p.png")),
+            extent=[0, 1280, 0, 720],
+            aspect="equal",
+        )
+
         plt.ion()
 
+        self.nodes = self.draw_network_nodes()
+        self.edges = self.draw_network_edges()
+        self.troops = self.draw_network_lables()
+        self.update_info_panel()
+
+    def _fig_canvas(self):
+        """Handling of window and toolbar, boring.
+        - Inits window attributes
+        - Handles: 'Close' and 'Pause' events
+        """
         self.canvas = self.fig.canvas
         self.canvas_manager = self.canvas.manager
         self.window = self.canvas_manager.window
@@ -67,7 +87,11 @@ class Board:
         self.canvas.mpl_connect("close_event", self.handle_close)
         self.canvas_manager.set_window_title("Risk Simulator")
 
-        screen_width, screen_height = self.get_screen_size()
+        screen_size = tk.Tk()
+        screen_width = screen_size.winfo_screenwidth()
+        screen_height = screen_size.winfo_screenheight()
+        screen_size.destroy()
+
         fig_width, fig_height = (1706, 720)
         fig_x = (screen_width // 2) - (fig_width // 2)
         fig_y = (screen_height // 2) - (fig_height // 2) - 50
@@ -83,28 +107,11 @@ class Board:
         img_icon = ImageTk.PhotoImage(icon_image)
         self.window.tk.call("wm", "iconphoto", self.window._w, img_icon)
 
-        img_path = os.path.join(os.path.dirname(__file__), "img", "risk_720p.png")
-        img = plt.imread(img_path)
-        self.board_ax.imshow(img, extent=[0, 1280, 0, 720], aspect="equal")
-
-        self.nodes = self.draw_network_nodes()
-        self.edges = self.draw_network_edges()
-        self.troops = self.draw_network_lables()
-        self.update_info_panel()
-
     @staticmethod
     def handle_close(evt):
         global paused
         paused = False
         sys.exit()
-
-    @staticmethod
-    def get_screen_size():
-        root = tk.Tk()
-        width = root.winfo_screenwidth()
-        height = root.winfo_screenheight()
-        root.destroy()
-        return width, height
 
     @staticmethod
     def dice_roll() -> int:
@@ -113,7 +120,7 @@ class Board:
     def get_card_type(self, country) -> int:
         if country == "Joker1" or country == "Joker2":
             return 0
-        return self.graph.nodes[country]["card_type"]
+        return self.G.nodes[country]["card_type"]
 
     def fresh_deck_of_cards(self) -> dict:
         deck = {
@@ -121,7 +128,7 @@ class Board:
                 "card_type": self.get_card_type(country),
                 "card_owner": 0,
             }
-            for country in self.graph.nodes
+            for country in self.G.nodes
         }
         deck["Joker1"] = {"card_type": 0, "card_owner": 0}
         deck["Joker2"] = {"card_type": 0, "card_owner": 0}
@@ -202,7 +209,7 @@ class Board:
 
             for card in maximum_bonus_combination:
                 if card in player_countries_with_card:
-                    self.update_troops(card, self.graph.nodes[card]["troops"] + 2)
+                    self.update_troops(card, self.G.nodes[card]["troops"] + 2)
 
             bonus_troops += possible_combinations_bonus[maximum_bonus_combination]
             for card in list(maximum_bonus_combination):
@@ -211,16 +218,13 @@ class Board:
         return bonus_troops
 
     def get_nodes_colors(self) -> List[str]:
-        return [
-            color_map[self.graph.nodes[node].get("owner", 1)]
-            for node in self.graph.nodes
-        ]
+        return [color_map[self.G.nodes[node].get("owner", 1)] for node in self.G.nodes]
 
     def get_edges_list(self) -> List[Tuple[str, str]]:
 
         return [
             (u, v)
-            for u, v in self.graph.edges
+            for u, v in self.G.edges
             if not (
                 (u == "Alaska" and v == "Kamchatka")
                 or (u == "Kamchatka" and v == "Alaska")
@@ -228,11 +232,11 @@ class Board:
         ]
 
     def get_troops_dict(self) -> dict:
-        return {node: self.graph.nodes[node]["troops"] for node in self.graph.nodes}
+        return {node: self.G.nodes[node]["troops"] for node in self.G.nodes}
 
     def draw_network_nodes(self):
         return nx.draw_networkx_nodes(
-            self.graph,
+            self.G,
             positions,
             node_size=2000,
             node_color=self.get_nodes_colors(),
@@ -243,7 +247,7 @@ class Board:
 
     def draw_network_edges(self):
         return nx.draw_networkx_edges(
-            self.graph,
+            self.G,
             positions,
             edgelist=self.get_edges_list(),
             width=1,
@@ -254,7 +258,7 @@ class Board:
 
     def draw_network_lables(self):
         return nx.draw_networkx_labels(
-            self.graph,
+            self.G,
             positions,
             font_size=12,
             font_color="black",
@@ -288,9 +292,9 @@ class Board:
 
     def draw_country_names(self):
         """Draw the country names as labels of the graph nodes with a formatted text."""
-        formatted_labels = {node: "\n".join(node.split()) for node in self.graph.nodes}
+        formatted_labels = {node: "\n".join(node.split()) for node in self.G.nodes}
         country_labels = nx.draw_networkx_labels(
-            self.graph,
+            self.G,
             positions,
             font_size=10,
             font_color="black",
@@ -303,7 +307,7 @@ class Board:
 
     def update_troops(self, country, troops, interactive=True):
         """Change the number of troops in a country."""
-        self.graph.nodes[country]["troops"] = troops
+        self.G.nodes[country]["troops"] = troops
         if interactive:
             self.highlight_country(country)
             self.draw_troops()
@@ -311,7 +315,7 @@ class Board:
 
     def update_owner(self, country, owner, interactive=True):
         """Change the owner of a country."""
-        self.graph.nodes[country]["owner"] = owner
+        self.G.nodes[country]["owner"] = owner
         if interactive:
             self.highlight_country(country)
             self.draw_nodes()
@@ -333,7 +337,7 @@ class Board:
 
         default_edges = [
             (u, v)
-            for u, v in self.graph.edges
+            for u, v in self.G.edges
             if not (
                 (u, v) == edge
                 or (v, u) == edge
@@ -342,7 +346,7 @@ class Board:
             )
         ]
         default_edges = nx.draw_networkx_edges(
-            self.graph,
+            self.G,
             positions,
             edgelist=default_edges,
             width=1,
@@ -357,11 +361,11 @@ class Board:
             default_edges.set_zorder(1)
 
         highlighted_edge = nx.draw_networkx_edges(
-            self.graph,
+            self.G,
             positions,
             edgelist=[edge],
             width=2,
-            edge_color=color_map[self.graph.nodes[edge[0]]["owner"]],
+            edge_color=color_map[self.G.nodes[edge[0]]["owner"]],
             style="solid",
             arrows=True,
             arrowsize=24,
@@ -389,7 +393,7 @@ class Board:
 
         default_edges = [
             (u, v)
-            for u, v in self.graph.edges
+            for u, v in self.G.edges
             if not (
                 (u, v) == edge
                 or (v, u) == edge
@@ -398,7 +402,7 @@ class Board:
             )
         ]
         default_edges = nx.draw_networkx_edges(
-            self.graph,
+            self.G,
             positions,
             edgelist=default_edges,
             width=1,
@@ -413,11 +417,11 @@ class Board:
             default_edges.set_zorder(1)
 
         highlighted_edge = nx.draw_networkx_edges(
-            self.graph,
+            self.G,
             positions,
             edgelist=[edge],
             width=2,
-            edge_color=color_map[self.graph.nodes[edge[0]]["owner"]],
+            edge_color=color_map[self.G.nodes[edge[0]]["owner"]],
             style="dashed",
             arrows=True,
             arrowsize=24,
@@ -432,11 +436,11 @@ class Board:
     def highlight_country(self, country):
         self.clear_highlighted_country()
         self.highlighted_country = nx.draw_networkx_nodes(
-            self.graph,
+            self.G,
             positions,
             nodelist=[country],
             node_size=2000,
-            node_color=color_map[self.graph.nodes[country]["owner"]],
+            node_color=color_map[self.G.nodes[country]["owner"]],
             alpha=0.8,
             edgecolors="black",
             linewidths=4,
@@ -463,7 +467,7 @@ class Board:
             else:
                 self.edges.remove()
         self.edges = nx.draw_networkx_edges(
-            self.graph,
+            self.G,
             positions,
             edgelist=self.get_edges_list(),
             width=1,
@@ -477,11 +481,11 @@ class Board:
         self.update_owner(country, random.randint(1, 6))
 
     def randomize_board(self):
-        for country in self.graph.nodes:
+        for country in self.G.nodes:
             self.randomize_country(country)
 
     def populate_initial_board(self):
-        list_of_countries = list(self.graph.nodes)
+        list_of_countries = list(self.G.nodes)
         random.shuffle(list_of_countries)
 
         # Select one random country for each player to start
@@ -494,9 +498,9 @@ class Board:
         players_troops = {
             player: sum(
                 [
-                    self.graph.nodes[country]["troops"]
+                    self.G.nodes[country]["troops"]
                     for country in list_of_countries
-                    if self.graph.nodes[country]["owner"] == player
+                    if self.G.nodes[country]["owner"] == player
                 ]
             )
             for player in range(1, 7)
@@ -511,20 +515,20 @@ class Board:
                 available_countries = [
                     country
                     for country in list_of_countries
-                    if self.graph.nodes[country]["owner"] == player
-                    or self.graph.nodes[country]["owner"] == 0
+                    if self.G.nodes[country]["owner"] == player
+                    or self.G.nodes[country]["owner"] == 0
                 ]
                 random.shuffle(available_countries)
                 selected_country = available_countries[
                     random.randint(0, len(available_countries) - 1)
                 ]
 
-                if self.graph.nodes[selected_country]["owner"] == 0:
+                if self.G.nodes[selected_country]["owner"] == 0:
                     self.update_owner(selected_country, player)
 
                 self.update_troops(
                     selected_country,
-                    self.graph.nodes[selected_country]["troops"] + 1,
+                    self.G.nodes[selected_country]["troops"] + 1,
                     interactive=False,
                 )
                 players_troops[player] += 1
@@ -539,10 +543,10 @@ class Board:
         for player in range(1, 7):
             territories = [
                 node
-                for node in self.graph.nodes
-                if self.graph.nodes[node].get("owner") == player
+                for node in self.G.nodes
+                if self.G.nodes[node].get("owner") == player
             ]
-            troops = sum(self.graph.nodes[node]["troops"] for node in territories)
+            troops = sum(self.G.nodes[node]["troops"] for node in territories)
             stats[player] = {"troops": troops, "territories": len(territories)}
         return stats
 
@@ -590,34 +594,34 @@ class Board:
             node = stack.pop()
             if node == destination:
                 return True
-            for neighbour in self.graph.neighbors(node):
+            for neighbour in self.G.neighbors(node):
                 if (
                     neighbour not in visited
-                    and self.graph.nodes[neighbour]["owner"] == owner
+                    and self.G.nodes[neighbour]["owner"] == owner
                 ):
                     visited.add(neighbour)
                     stack.append(neighbour)
         return False
 
     def get_player_countries(self, player: int) -> List[str]:
-        all_countries = list(self.graph.nodes)
+        all_countries = list(self.G.nodes)
         player_countries = []
         for country in all_countries:
-            owner_of_country = self.graph.nodes[country]["owner"]
+            owner_of_country = self.G.nodes[country]["owner"]
             if owner_of_country == player:
                 player_countries.append(country)
         return player_countries
 
     def dice_rolls_defense(self, country: str) -> List[int]:
-        if self.graph.nodes[country]["troops"] > 1:
+        if self.G.nodes[country]["troops"] > 1:
             return [self.dice_roll(), self.dice_roll()]
         else:
             return [self.dice_roll()]
 
     def dice_rolls_attack(self, country: str) -> List[int]:
-        if self.graph.nodes[country]["troops"] > 3:
+        if self.G.nodes[country]["troops"] > 3:
             return [self.dice_roll(), self.dice_roll(), self.dice_roll()]
-        elif self.graph.nodes[country]["troops"] == 3:
+        elif self.G.nodes[country]["troops"] == 3:
             return [self.dice_roll(), self.dice_roll()]
         else:
             return [self.dice_roll()]
@@ -658,22 +662,22 @@ class Board:
         countries_for_attack = [
             country
             for country in player_countries
-            if self.graph.nodes[country]["troops"] > 2
+            if self.G.nodes[country]["troops"] > 2
         ]
         if not countries_for_attack:
             return []
         neighbour_pairs = [
             (country, neighbour)
             for country in countries_for_attack
-            for neighbour in list(self.graph.neighbors(country))
-            if self.graph.nodes[neighbour]["owner"] != player
+            for neighbour in list(self.G.neighbors(country))
+            if self.G.nodes[neighbour]["owner"] != player
         ]
         if not neighbour_pairs:
             return []
         return neighbour_pairs
 
     def roll_attack_once(self, attacker: str, defender: str):
-        possible_attacks = self.get_attacks(self.graph.nodes[attacker]["owner"])
+        possible_attacks = self.get_attacks(self.G.nodes[attacker]["owner"])
         if not possible_attacks or (attacker, defender) not in possible_attacks:
             return
 
@@ -684,23 +688,21 @@ class Board:
         defender_rolls.sort(reverse=True)
 
         for i in range(min(len(attacker_rolls), len(defender_rolls))):
-            if self.graph.nodes[attacker]["troops"] == 1:
+            if self.G.nodes[attacker]["troops"] == 1:
                 break
             if attacker_rolls[i] < defender_rolls[i]:
-                self.update_troops(attacker, self.graph.nodes[attacker]["troops"] - 1)
+                self.update_troops(attacker, self.G.nodes[attacker]["troops"] - 1)
             else:
-                if self.graph.nodes[defender]["troops"] > 1:
-                    self.update_troops(
-                        defender, self.graph.nodes[defender]["troops"] - 1
-                    )
+                if self.G.nodes[defender]["troops"] > 1:
+                    self.update_troops(defender, self.G.nodes[defender]["troops"] - 1)
                 else:
-                    attacker_troops_left = self.graph.nodes[attacker]["troops"] - 1
+                    attacker_troops_left = self.G.nodes[attacker]["troops"] - 1
                     leave_troops_behind = 0
 
                     if attacker_troops_left > 3:
                         leave_troops_behind = random.randint(0, 1)
 
-                    self.update_owner(defender, self.graph.nodes[attacker]["owner"])
+                    self.update_owner(defender, self.G.nodes[attacker]["owner"])
                     self.update_troops(
                         defender, attacker_troops_left - leave_troops_behind
                     )
@@ -727,7 +729,7 @@ class Board:
                 for country in player_countries
                 if all(
                     neighbour in player_countries
-                    for neighbour in list(self.graph.neighbors(country))
+                    for neighbour in list(self.G.neighbors(country))
                 )
             ]
             if peaceful_destinations:
@@ -745,7 +747,7 @@ class Board:
             self.highlight_country(country)
             plt.pause(0.1)
             print(f"Player {player} is reinforcing {country} with {troops} troops")
-            self.update_troops(country, self.graph.nodes[country]["troops"] + troops)
+            self.update_troops(country, self.G.nodes[country]["troops"] + troops)
             plt.pause(0.1)
             self.clear_highlighted_country()
             plt.pause(0.1)
@@ -760,27 +762,27 @@ class Board:
         lowest_attack = (999, 999)
         lowest_names = ("", "")
         for pair_attack in possible_attacks:
-            origin_troops = self.graph.nodes[pair_attack[0]]["troops"]
-            destination_troops = self.graph.nodes[pair_attack[1]]["troops"]
+            origin_troops = self.G.nodes[pair_attack[0]]["troops"]
+            destination_troops = self.G.nodes[pair_attack[1]]["troops"]
             if destination_troops < lowest_attack[1] and origin_troops > 1:
                 lowest_attack = (origin_troops, destination_troops)
                 lowest_names = pair_attack
 
         origin, destination = lowest_names
 
-        destination_neighbours = list(self.graph.neighbors(destination))
+        destination_neighbours = list(self.G.neighbors(destination))
 
         player_countries_of_destination_neighbours = [
             country
             for country in destination_neighbours
-            if self.graph.nodes[country]["owner"] == player
+            if self.G.nodes[country]["owner"] == player
         ]
 
         maximum_troops_neighbour = ""
         if len(player_countries_of_destination_neighbours) > 1:
             maximum_troops_neighbour_player = 0
             for country in player_countries_of_destination_neighbours:
-                troops = self.graph.nodes[country]["troops"]
+                troops = self.G.nodes[country]["troops"]
                 if troops > maximum_troops_neighbour_player:
                     maximum_troops_neighbour_player = troops
                     maximum_troops_neighbour = country
@@ -788,7 +790,7 @@ class Board:
             origin = maximum_troops_neighbour
 
         print(
-            f"Player {player} is attacking from {origin} to {destination} with {self.graph.nodes[origin]['troops']} troops"
+            f"Player {player} is attacking from {origin} to {destination} with {self.G.nodes[origin]['troops']} troops"
         )
 
         self.clear_highlighted_edge()
@@ -797,9 +799,9 @@ class Board:
         self.highlight_country(origin)
         self.highlight_edge((origin, destination))
         plt.pause(0.1)
-        destination_owner_before_attack = self.graph.nodes[destination]["owner"]
+        destination_owner_before_attack = self.G.nodes[destination]["owner"]
         self.roll_attack_once(origin, destination)
-        destination_owner_after_attack = self.graph.nodes[destination]["owner"]
+        destination_owner_after_attack = self.G.nodes[destination]["owner"]
         plt.pause(0.1)
         self.clear_highlighted_edge()
         self.clear_highlighted_country()
@@ -817,7 +819,7 @@ class Board:
 
         # Check if the player conquered a country
         local_already_card = already_card
-        if (self.graph.nodes[destination]["owner"] == player) and not already_card:
+        if (self.G.nodes[destination]["owner"] == player) and not already_card:
             # Change a random card owner but only cards which have not been assigned yet
             cards = [
                 card
@@ -830,8 +832,8 @@ class Board:
                 print(f"Player {player} got the card {random_card}")
             local_already_card = True
 
-        if (self.graph.nodes[destination]["owner"] == player) and (
-            self.graph.nodes[origin]["troops"] > 2
+        if (self.G.nodes[destination]["owner"] == player) and (
+            self.G.nodes[origin]["troops"] > 2
         ):
             print(
                 f"Player {player} conquered {destination} and has troops for attacking again.\n"
@@ -840,7 +842,7 @@ class Board:
 
         # Check if the player has any country with more than 3 troops
         if any(
-            self.graph.nodes[country]["troops"] > 3
+            self.G.nodes[country]["troops"] > 3
             for country in self.get_player_countries(player)
         ):
             print(f"Player {player} can attack\n")
@@ -853,7 +855,7 @@ class Board:
         countries_for_fortify = [
             country
             for country in player_countries
-            if self.graph.nodes[country]["troops"] > 1
+            if self.G.nodes[country]["troops"] > 1
         ]
         if not countries_for_fortify:
             return
@@ -873,7 +875,7 @@ class Board:
             for country in destinations
             if all(
                 neighbour in player_countries
-                for neighbour in list(self.graph.neighbors(country))
+                for neighbour in list(self.G.neighbors(country))
             )
         ]
         if peaceful_destinations:
@@ -882,11 +884,11 @@ class Board:
                 destinations.remove(peaceful_destination)
         if not destinations:
             return
-        origin_troops = self.graph.nodes[origin]["troops"]
+        origin_troops = self.G.nodes[origin]["troops"]
         # Check if all origin neighbours are player's countries
         origin_peaceful = all(
             neighbour in player_countries
-            for neighbour in list(self.graph.neighbors(origin))
+            for neighbour in list(self.G.neighbors(origin))
         )
         lower_level_margin = 1
         if origin_peaceful and origin_troops > 3:
@@ -903,8 +905,8 @@ class Board:
         self.highlight_country(destination)
         self.highlight_edge_slightly((origin, destination))
         plt.pause(0.1)
-        self.update_troops(origin, self.graph.nodes[destination]["troops"] - n_troops)
-        self.update_troops(origin, self.graph.nodes[destination]["troops"] + n_troops)
+        self.update_troops(origin, self.G.nodes[destination]["troops"] - n_troops)
+        self.update_troops(origin, self.G.nodes[destination]["troops"] + n_troops)
         plt.pause(0.1)
         self.clear_highlighted_country()
         self.clear_highlighted_edge()
@@ -912,7 +914,7 @@ class Board:
         print("Fortification done\n")
 
     def world_is_conquered(self) -> bool:
-        players = [self.graph.nodes[country]["owner"] for country in self.graph.nodes]
+        players = [self.G.nodes[country]["owner"] for country in self.G.nodes]
         if len(set(players)) == 1:
             print(f"Player {players[0]} has conquered the world!")
             return True
