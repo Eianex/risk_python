@@ -16,6 +16,7 @@ from typing import List, Tuple
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import networkx as nx
+from matplotlib.animation import FuncAnimation
 from matplotlib.backend_tools import ToolBase
 from matplotlib.collections import LineCollection
 from PIL import Image, ImageTk
@@ -41,19 +42,6 @@ class Pause(ToolBase):
     def trigger(self, sender, event, data=None):
         global paused
         paused = not paused
-        canvas = self.figure.canvas
-        root = canvas.manager.window
-
-        while paused:
-            root.update_idletasks()
-            root.update()
-            time.sleep(0.1)
-
-    @staticmethod
-    def handle_close(evt):
-        global paused
-        paused = False
-        sys.exit()
 
 
 class Board:
@@ -76,7 +64,7 @@ class Board:
         self.tool_manager = self.canvas_manager.toolmanager
         self.toolbar = self.canvas_manager.toolbar
 
-        self.canvas.mpl_connect("close_event", Pause.handle_close)
+        self.canvas.mpl_connect("close_event", self.handle_close)
         self.canvas_manager.set_window_title("Risk Simulator")
 
         screen_width, screen_height = self.get_screen_size()
@@ -103,6 +91,12 @@ class Board:
         self.edges = self.draw_network_edges()
         self.troops = self.draw_network_lables()
         self.update_info_panel()
+
+    @staticmethod
+    def handle_close(evt):
+        global paused
+        paused = False
+        sys.exit()
 
     @staticmethod
     def get_screen_size():
