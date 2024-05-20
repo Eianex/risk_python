@@ -220,9 +220,17 @@ class Board:
     def get_nodes_colors(self) -> List[str]:
         return [color_map[self.G.nodes[node].get("owner", 1)] for node in self.G.nodes]
 
-    def get_edges_list(self) -> List[Tuple[str, str]]:
+    def get_edges_list(self, exclude=None) -> List[Tuple[str, str]]:
 
-        return [
+        exclusion_list = []
+        if exclude or type(exclude) != None:
+            if type(exclude) == tuple:
+                exclusion_list.append(exclude)
+            if type(exclude) == list:
+                for edge in exclude:
+                    exclusion_list.append(edge)
+
+        all_edges = [
             (u, v)
             for u, v in self.G.edges
             if not (
@@ -231,8 +239,15 @@ class Board:
             )
         ]
 
-    def get_troops_dict(self) -> dict:
-        return {node: self.G.nodes[node]["troops"] for node in self.G.nodes}
+        result_edges = all_edges.copy()
+
+        for edge in exclusion_list:
+            if edge in result_edges:
+                result_edges.remove(edge)
+            if (edge[1], edge[0]) in result_edges:
+                result_edges.remove((edge[1], edge[0]))
+
+        return result_edges
 
     def draw_network_nodes(self):
         return nx.draw_networkx_nodes(
@@ -257,13 +272,14 @@ class Board:
         )
 
     def draw_network_lables(self):
+        troops_dict = {node: self.G.nodes[node]["troops"] for node in self.G.nodes}
         return nx.draw_networkx_labels(
             self.G,
             positions,
             font_size=12,
             font_color="black",
             font_weight="bold",
-            labels=self.get_troops_dict(),
+            labels=troops_dict,
             verticalalignment="center",
             horizontalalignment="center",
             font_family="monospace",
@@ -335,16 +351,8 @@ class Board:
             else:
                 self.edges.remove()
 
-        default_edges = [
-            (u, v)
-            for u, v in self.G.edges
-            if not (
-                (u, v) == edge
-                or (v, u) == edge
-                or (u == "Alaska" and v == "Kamchatka")
-                or (u == "Kamchatka" and v == "Alaska")
-            )
-        ]
+        default_edges = self.get_edges_list(exclude=edge)
+
         default_edges = nx.draw_networkx_edges(
             self.G,
             positions,
@@ -391,16 +399,8 @@ class Board:
             else:
                 self.edges.remove()
 
-        default_edges = [
-            (u, v)
-            for u, v in self.G.edges
-            if not (
-                (u, v) == edge
-                or (v, u) == edge
-                or (u == "Alaska" and v == "Kamchatka")
-                or (u == "Kamchatka" and v == "Alaska")
-            )
-        ]
+        default_edges = self.get_edges_list(exclude=edge)
+
         default_edges = nx.draw_networkx_edges(
             self.G,
             positions,

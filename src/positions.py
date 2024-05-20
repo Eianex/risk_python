@@ -88,3 +88,13 @@ continents = {
     ],
     "Australia": ["Indonesia", "New Guinea", "Western Australia", "Eastern Australia"],
 }
+
+""" 
+Calculation of figure size width, taking into account the info panel
+1280/3 = 426
+1280 + 426 = 1706
+Ration 3:1 (3 map + 1 info panel = 4 total)
+1280 * 4/3 = 1706
+Original fig size: 12.8 x 7.2
+New fig size: 17.06 x 7.2
+"""
