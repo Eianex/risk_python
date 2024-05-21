@@ -3,41 +3,53 @@ import networkx as nx
 import numpy as np
 from matplotlib.animation import FuncAnimation
 
-
-def draw_graph(pos):
-    plt.clf()
-    nx.draw(
-        G, pos, with_labels=True, node_color="skyblue", node_size=700, edge_color="gray"
-    )
-    plt.title("Undirected Graph Animation")
-
+G = nx.Graph()
 
 nodes = range(5)
 edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 0), (0, 2), (1, 3)]
 
-G = nx.Graph()
 G.add_nodes_from(nodes)
 G.add_edges_from(edges)
 
-pos = {
-    0: np.array([0.0, 0.0]),
-    1: np.array([1.0, 1.0]),
-    2: np.array([2.0, 2.0]),
-    3: np.array([3.0, 3.0]),
-    4: np.array([4.0, 4.0]),
-}
+pos = nx.spring_layout(G)
 
 fig, ax = plt.subplots()
 
+node_colors = ["skyblue"] * len(G.nodes)
+edge_colors = ["gray"] * len(G.edges)
 
-def update(num, pos, ax: plt.Axes):
-    ax.clear()
-    draw_graph(pos)
+base_node_collection = nx.draw_networkx_nodes(
+    G, pos, ax=ax, node_color=node_colors, node_size=300, node_shape="o"
+)
+base_edge_collection = nx.draw_networkx_edges(G, pos, ax=ax, edge_color=edge_colors)
+label_collection = nx.draw_networkx_labels(G, pos, ax=ax)
 
-    for node in pos:
-        pos[node] += np.random.normal(0.01, 0.01, 2)
+highlight_node = None
+highlight_edges = None
 
 
-ani = FuncAnimation(fig, update, frames=100, fargs=(pos, ax), interval=10, repeat=False)
+def update(frame):
+    global highlight_node, highlight_edges
 
+    if highlight_node:
+        highlight_node.remove()
+    if highlight_edges:
+        highlight_edges.remove()
+
+    highlight_node = nx.draw_networkx_nodes(
+        G, pos, nodelist=[3], ax=ax, node_color=np.random.rand(3,), node_size=600, node_shape="s"
+    )
+
+    highlight_edges = nx.draw_networkx_edges(
+        G,
+        pos,
+        edgelist=[(u, v) for u, v in G.edges if u == 3 or v == 3],
+        ax=ax,
+        edge_color=np.random.rand(3,),
+        width=2,
+        style="dotted",
+    )
+
+
+ani = FuncAnimation(fig, update, frames=100, interval=20, repeat=False)
 plt.show()

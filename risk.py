@@ -217,9 +217,6 @@ class Board:
 
         return bonus_troops
 
-    def get_nodes_colors(self) -> List[str]:
-        return [color_map[self.G.nodes[node].get("owner", 1)] for node in self.G.nodes]
-
     def get_edges_list(self, exclude=None) -> List[Tuple[str, str]]:
 
         exclusion_list = []
@@ -250,11 +247,14 @@ class Board:
         return result_edges
 
     def draw_network_nodes(self):
+        node_colors = [
+            color_map[self.G.nodes[node].get("owner", 1)] for node in self.G.nodes
+        ]
         return nx.draw_networkx_nodes(
             self.G,
             positions,
             node_size=2000,
-            node_color=self.get_nodes_colors(),
+            node_color=node_colors,
             alpha=0.60,
             node_shape="o",
             ax=self.board_ax,
@@ -476,14 +476,6 @@ class Board:
             ax=self.board_ax,
         )
 
-    def randomize_country(self, country):
-        self.update_troops(country, random.randint(1, 10))
-        self.update_owner(country, random.randint(1, 6))
-
-    def randomize_board(self):
-        for country in self.G.nodes:
-            self.randomize_country(country)
-
     def populate_initial_board(self):
         list_of_countries = list(self.G.nodes)
         random.shuffle(list_of_countries)
@@ -604,13 +596,11 @@ class Board:
         return False
 
     def get_player_countries(self, player: int) -> List[str]:
-        all_countries = list(self.G.nodes)
-        player_countries = []
-        for country in all_countries:
-            owner_of_country = self.G.nodes[country]["owner"]
-            if owner_of_country == player:
-                player_countries.append(country)
-        return player_countries
+        return [
+            country
+            for country in list(self.G.nodes)
+            if self.G.nodes[country]["owner"] == player
+        ]
 
     def dice_rolls_defense(self, country: str) -> List[int]:
         if self.G.nodes[country]["troops"] > 1:
